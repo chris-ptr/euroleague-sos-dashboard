@@ -20,7 +20,7 @@ from sos.compute import (
 from sos.charts import (
     build_nextN_altair_logos_table,
     make_sos_table_chart,
-    make_sos_scatter_with_table,
+    make_sos_scatter_and_side_table,
 )
 
 from sos.utils import team_to_logo_path, logo_to_dataurl
@@ -39,26 +39,29 @@ st.title("EuroLeague Strength of Schedule Dashboard")
 with st.sidebar:
     st.header("Configuration")
 
-    season = st.number_input(
-        "Season (start year)",
-        min_value=2010,
-        max_value=2100,
-        value=DEFAULT_SEASON,
-        step=1,
+    
+    season = st.sidebar.selectbox(
+        "Season",
+        ["2025"],
+        index=0,
+        disabled=True,
+        help="Only the 2025 season is available at the moment."
     )
 
     competition_code = st.text_input(
         "Competition code",
         value=DEFAULT_COMPETITION,
-        help='"E" = EuroLeague, "U" = EuroCup, etc.',
+        disabled=True,
+        help='Only "E" (EuroLeague) is available at the moment.',
     )
 
     current_round = st.number_input(
-        "Current round (for SoS up to / next-N)",
+        "Current round",
         min_value=1,
         max_value=40,
         value=DEFAULT_CURRENT_ROUND,
         step=1,
+        help="Enter the latest non completed round number.",
     )
 
     n_next = st.slider(
@@ -155,8 +158,8 @@ def load_nextN_sos(
 tabs = st.tabs(
     [
         f"Next {int(n_next)} Games SoS",
-        "Season SoS: Scatter + Table",
-        "Season SoS Table Only",
+        "Strength of Schedule vs Team NetRtg Scatter",
+        "NetRtg & Win% Methods Table",
     ]
 )
 
@@ -164,11 +167,7 @@ tabs = st.tabs(
 # TAB 1 – Next N Games SoS (build_nextN_altair_logos_table)
 # =========================================================
 with tabs[0]:
-    st.subheader(
-        f"Strength of Schedule – Next {int(n_next)} Games "
-        f"(from Round {int(current_round)})"
-    )
-
+    
     try:
         sos_nextN_df = load_nextN_sos(
             current_round=int(current_round),
@@ -196,14 +195,11 @@ with tabs[0]:
 
 # =========================================================
 # TAB 2 – SoS(NetRtg) vs NetRtg scatter + side table
-#          (make_sos_scatter_with_table)
+#          ( make_sos_scatter_and_side_table)
 # =========================================================
 with tabs[1]:
-    st.subheader(
-        f"SoS(NetRtg) vs Team NetRtg – Season-to-date (up to Round {int(current_round)})"
-    )
 
-    scatter_chart = make_sos_scatter_with_table(
+    main_chart, side_table_chart = make_sos_scatter_and_side_table(
         sos_net=sos_net,
         team_ratings=team_ratings,
         team_to_logo_path=team_to_logo_path,
@@ -212,18 +208,22 @@ with tabs[1]:
         bottom_k=5,
         round_ref=int(current_round),
         season_label=season_label,
-        # background handled in the chart (default "#a3a1a1")
     )
-    st.altair_chart(scatter_chart)
+
+    col1, col2 = st.columns([3, 2])
+
+    with col1:
+        st.altair_chart(main_chart, width="stretch")
+
+    with col2:
+        st.altair_chart(side_table_chart, width="content")
+
 
 
 # =========================================================
 # TAB 3 – Season SoS table (make_sos_table_chart)
 # =========================================================
 with tabs[2]:
-    st.subheader(
-        f"Season-to-date SoS – NetRtg & Win% (up to Round {int(current_round)})"
-    )
 
     sos_table_chart = make_sos_table_chart(
         sos_net=sos_net,

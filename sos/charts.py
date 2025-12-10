@@ -30,15 +30,14 @@ def build_nextN_altair_logos_table(
     """
 
     # ---------- STYLE SETTINGS ----------
-    ROW_FONT = "Inter"
-    TITLE_FONT = "Montserrat"
-
+    ROW_FONT = "Roboto"
+    TITLE_FONT = "Arial"
     FONT_SIZE = 15
-    TITLE_FONT_SIZE = 22
+    TITLE_FONT_SIZE = 18
 
-    LEFT_COL_WIDTH = 260
+    LEFT_COL_WIDTH = 300
     SOS_COL_WIDTH = 120
-    GAMES_COL_WIDTH = 340
+    GAMES_COL_WIDTH = 440
 
     LOGO_SIZE_MAIN = 24
     LOGO_SIZE_OPP = 26
@@ -104,7 +103,7 @@ def build_nextN_altair_logos_table(
         teams_df.sort_values("SoS_Net_nextN", ascending=False)["Team"].tolist()
     )
 
-    teams_df["SoS_Col"] = "SoS"
+    teams_df["SoS_Col"] = ""
 
     # ---------- 4) Left column: logo + team name ----------
     logo_mark = (
@@ -151,7 +150,7 @@ def build_nextN_altair_logos_table(
         alt.Chart(teams_df)
         .mark_rect(stroke="lightgray")
         .encode(
-            x=alt.X("SoS_Col:N", title=f"Next-{n_next} SoS"),
+            x=alt.X("SoS_Col:N", title=f"Next {n_next} SoS"),
             y=alt.Y("Team:N", sort=team_order, title=None, axis=None),
             color=sos_color,
             tooltip=[
@@ -166,7 +165,7 @@ def build_nextN_altair_logos_table(
         alt.Chart(teams_df)
         .mark_text(size=FONT_SIZE, baseline="middle")
         .encode(
-            x=alt.X("SoS_Col:N", title=f"Next-{n_next} SoS"),
+            x=alt.X("SoS_Col:N", title=f"Next {n_next} SoS"),
             y=alt.Y("Team:N", sort=team_order, title=None, axis=None),
             text=alt.Text("SoS_Net_nextN:Q", format=".2f"),
         )
@@ -188,7 +187,7 @@ def build_nextN_altair_logos_table(
         .encode(
             x=alt.X(
                 "game_idx:O",
-                title=f"Next {n_next} games",
+                title=f"Next {n_next} Games",
                 axis=alt.Axis(labelAngle=0),
             ),
             y=alt.Y("Team:N", sort=team_order, title=None, axis=None),
@@ -218,8 +217,8 @@ def build_nextN_altair_logos_table(
 
     # ---------- 7) Final layout + title + fonts ----------
     title_txt = (
-        f"Euroleague Strength of Schedule based on NetRtg "
-        f"from round {round_ref - 1} for the next {n_next} games"
+        f"Strength of Schedule based on NetRtg "
+        f"from Round {round_ref - 1} for the next {n_next} games"
     )
 
     chart = (
@@ -288,16 +287,22 @@ def make_sos_table_chart(
     sos_win: must have ['TEAM_NAME', 'SoS'] (SoS = Win% SoS)
     """
 
+    # ---------- fonts to match Next-N chart ----------
+    ROW_FONT = "Roboto"
+    TITLE_FONT = "Arial"
+    FONT_SIZE = 15
+    TITLE_FONT_SIZE = 18
+
     # ---------- dynamic title ----------
     if title is None:
         if season_label is not None and round_ref is not None:
             title = (
-                f"EuroLeague Strength of Schedule {season_label} "
-                f"(After Round {round_ref - 1})\n(Net Rating vs Win% Methods)"
+                f"Strength of Schedule {season_label} "
+                f"Untill Round {round_ref} \n (Net Rating & Win% Methods Comparison)"
             )
         elif round_ref is not None:
             title = (
-                f"EuroLeague Strength of Schedule (After Round {round_ref - 1})\n"
+                f"EuroLeague Strength of Schedule (Untill Round {round_ref})\n"
                 f"(Net Rating vs Win% Methods)"
             )
         else:
@@ -365,7 +370,7 @@ def make_sos_table_chart(
         align="left",
         baseline="middle",
         dx=logo_size + 27,  # 55 for size 28; scales if you change logo_size
-        fontSize=11,
+        fontSize=15,
     ).encode(
         y=alt.Y(
             "TEAM_NAME:N",
@@ -492,11 +497,31 @@ def make_sos_table_chart(
     ).properties(
         title=title,
         background="#a3a1a1",
+        padding={"left": 20, "right": 20, "top": 20, "bottom": 20},
+    ).configure_axis(
+        labelFont=ROW_FONT,
+        titleFont=ROW_FONT,
+        labelFontSize=FONT_SIZE,
+        titleFontSize=FONT_SIZE,
+    ).configure_title(
+        font=TITLE_FONT,
+        fontSize=TITLE_FONT_SIZE,
+    ).configure_text(
+        font=ROW_FONT,
+        fontSize=FONT_SIZE,
+    ).configure_legend(
+        labelFont=ROW_FONT,
+        titleFont=ROW_FONT,
+        labelFontSize=FONT_SIZE,
+        titleFontSize=FONT_SIZE,
+    ).configure_view(
+        stroke=None,
     )
 
     return sos_table_chart
 
-def make_sos_scatter_with_table(
+# Function to have both tables on the sos scatter
+def make_sos_scatter_and_side_table(
     sos_net: pd.DataFrame,
     team_ratings: pd.DataFrame,
     team_to_logo_path,
@@ -508,32 +533,18 @@ def make_sos_scatter_with_table(
     season_label: str | None = None,
     title: str | None = None,
     background: str = "#a3a1a1",
-) -> alt.Chart:
+) -> tuple[alt.Chart, alt.Chart]:
     """
-    Build the SoS(NetRtg) vs NetRtg scatter with quadrant labels and
-    a side table showing top_k and bottom_k teams by NetRtg.
+    Build SoS(NetRtg) vs NetRtg scatter + side table,
+    but return them as two separate charts (main_chart, table_chart)
+    so Streamlit can show them in two columns.
+    """
 
-    Parameters
-    ----------
-    sos_net : DataFrame
-        Must contain ['TEAM_NAME', 'SoS_Net'].
-    team_ratings : DataFrame
-        Must contain ['TEAM_NAME', 'NetRtg', 'OffRtg', 'DefRtg'].
-    team_to_logo_path : callable
-        Function TEAM_NAME -> local logo path.
-    logo_to_dataurl : callable
-        Function path -> data URL string (for Altair images).
-    top_k, bottom_k : int
-        Number of best / worst teams to show in the side panel.
-    round_ref : int, optional
-        Round number used for dynamic title ("After Round N").
-    season_label : str, optional
-        Season label, e.g. "2025-26".
-    title : str, optional
-        If provided, overrides the auto-generated title.
-    background : str
-        Background color for the combined chart.
-    """
+    # ---------- fonts to match Next-N chart ----------
+    ROW_FONT = "Roboto"
+    TITLE_FONT = "Arial"
+    FONT_SIZE = 15
+    TITLE_FONT_SIZE = 18
 
     # ---------- dynamic title ----------
     if title is None:
@@ -596,9 +607,9 @@ def make_sos_scatter_with_table(
     y_bottom = y_min * 0.65
 
     quad_df = pd.DataFrame([
-        {"x": x_left,  "y": y_top,    "label": "Tough Schedule\nOverperforming",  "color": "darkorange"},
-        {"x": x_right, "y": y_top,    "label": "Easy Schedule\nStrong Team",      "color": "teal"},
-        {"x": x_left,  "y": y_bottom, "label": "Tough Schedule\nUnderperforming", "color": "green"},
+        {"x": x_left,  "y": y_top,    "label": "Tough Schedule\nOverperforming",  "color": "#E67E22"},
+        {"x": x_right, "y": y_top,    "label": "Easy Schedule\nStrong Team",      "color": "#000000"},
+        {"x": x_left,  "y": y_bottom, "label": "Tough Schedule\nUnderperforming", "color": "blue"},
         {"x": x_right, "y": y_bottom, "label": "Easy Schedule\nUnderperforming",  "color": "navy"},
     ])
 
@@ -610,13 +621,16 @@ def make_sos_scatter_with_table(
         opacity=0.95,
         align="center",
         lineBreak="\n",
-        stroke="black",      # subtle outline
-        strokeWidth=1.0,
+        stroke="black",
+        strokeWidth=0.25,
     ).encode(
         x="x:Q",
         y="y:Q",
-        text="label_lines:N",
-        color=alt.Color("color:N", legend=None),
+        text="label:N",
+        color=alt.Color(
+            "color:N",
+            legend=None,
+        ),
     )
 
     # =========================================================
@@ -633,23 +647,19 @@ def make_sos_scatter_with_table(
             title="Team NetRtg",
             scale=alt.Scale(domain=[y_min, y_max], nice=True, zero=False),
         ),
-    ).properties(
-        width=720,
-        height=560,
-        title=title,
     )
 
     # thick 0-lines
     rule_y0 = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(
-        stroke="black", strokeWidth=2.5, opacity=0.9
+        stroke="black", strokeWidth=1.5, opacity=0.9
     ).encode(y="y:Q")
 
     rule_x0 = alt.Chart(pd.DataFrame({"x": [0]})).mark_rule(
-        stroke="black", strokeWidth=2.5, opacity=0.9
+        stroke="black", strokeWidth=1.5, opacity=0.9
     ).encode(x="x:Q")
 
     # logos
-    logo_layer = base.mark_image(width=45, height=45).encode(
+    logo_layer = base.mark_image(width=40, height=40).encode(
         url="logo_url:N",
         tooltip=[
             alt.Tooltip("TEAM_NAME:N"),
@@ -659,7 +669,7 @@ def make_sos_scatter_with_table(
         ],
     )
 
-    # #Rank labels above logos (only top 4 + bottom 4)
+    # Rank labels above logos (only top 4 + bottom 4)
     label_layer = alt.Chart(hi_lo_df).encode(
         x=alt.X("SoS_Net:Q", scale=alt.Scale(domain=x_domain, nice=False, zero=False)),
         y=alt.Y("NetRtg:Q", scale=alt.Scale(domain=[y_min, y_max], nice=True, zero=False)),
@@ -681,6 +691,36 @@ def make_sos_scatter_with_table(
         + logo_layer
         + label_layer
         + quad_layer
+    ).properties(
+        width=720,
+        height=560,
+        title=title,
+        background=background,
+        padding={"left": 20, "right": 20, "top": 20, "bottom": 20},
+    ).configure_axis(
+        labelFont=ROW_FONT,
+        titleFont=ROW_FONT,
+        labelFontSize=FONT_SIZE,
+        titleFontSize=FONT_SIZE,
+        grid=True,
+        gridColor="#d3d3d3",
+        gridWidth=0.4,
+        domainColor="#555",
+        tickColor="#555",
+        labelColor="black",
+        titleColor="black",
+        titlePadding=12,
+    ).configure_title(
+        font=TITLE_FONT,
+        fontSize=TITLE_FONT_SIZE,
+    ).configure_text(
+        font=ROW_FONT,
+        fontSize=FONT_SIZE,
+    ).configure_legend(
+        labelFont=ROW_FONT,
+        titleFont=ROW_FONT,
+        labelFontSize=FONT_SIZE,
+        titleFontSize=FONT_SIZE,
     )
 
     # =========================================================
@@ -733,26 +773,28 @@ def make_sos_scatter_with_table(
         width=350,
         height=560,
         title=f"Top {top_k} / Bottom {bottom_k} Net Ratings",
-    )
-
-    # =========================================================
-    # 5. CONCATENATE: main scatter + side table, with background + axis config
-    # =========================================================
-    final_chart = alt.hconcat(
-        main_chart,
-        table_chart,
-    ).resolve_scale(
-        color="independent",
-    ).properties(
         background=background,
+        padding={"left": 20, "right": 20, "top": 20, "bottom": 20},
     ).configure_axis(
-        grid=True,
-        gridColor="#d3d3d3",
-        gridWidth=0.4,
-        domainColor="#555",
-        tickColor="#555",
-        labelColor="black",
-        titleColor="black",
+        labelFont=ROW_FONT,
+        titleFont=ROW_FONT,
+        labelFontSize=FONT_SIZE,
+        titleFontSize=FONT_SIZE,
+    ).configure_title(
+        font=TITLE_FONT,
+        fontSize=TITLE_FONT_SIZE,
+    ).configure_text(
+        font=ROW_FONT,
+        fontSize=FONT_SIZE,
+    ).configure_legend(
+        labelFont=ROW_FONT,
+        titleFont=ROW_FONT,
+        labelFontSize=FONT_SIZE,
+        titleFontSize=FONT_SIZE,
+    ).configure_view(
+        stroke="black",
+        strokeWidth=1.0,
     )
 
-    return final_chart
+    return main_chart, table_chart
+
