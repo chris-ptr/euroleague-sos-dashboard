@@ -157,6 +157,7 @@ def load_nextN_sos(
 # ---------------------------------------------------------
 tabs = st.tabs(
     [
+        "Info / About Project",
         f"Next {int(n_next)} Games SoS",
         "Strength of Schedule vs Team NetRtg Scatter",
         "NetRtg & Win% Methods Table",
@@ -164,9 +165,308 @@ tabs = st.tabs(
 )
 
 # =========================================================
+# TAB 0 – Info / About Project
+# =========================================================
+
+with tabs[0]:
+    st.subheader(
+        "A project to calculate schedule difficulty using team strength and upcoming opponents, based on Team Net Rating."
+    )
+
+    st.markdown(
+        """
+## Project overview
+This dashboard analyzes **Strength of Schedule (SoS)** in the EuroLeague by combining:
+- Team performance metrics (Net Rating, Win%)
+- Official EuroLeague schedule data
+- Upcoming opponent difficulty
+
+The objective is to contextualize team performance by answering:
+- How difficult has a team’s schedule been?
+- How difficult will it be going forward?
+"""
+    )
+
+    st.markdown("---")
+
+    st.markdown(
+        """
+## Data sources
+
+### Schedule (official EuroLeague PDF → parsed)
+The Regular Season schedule was parsed from the **official EuroLeague schedule PDF** and exported into:
+- `EL_2025_26_EL_RS_Schedule.csv`
+
+This file is used to determine future opponents for the **Next-N** analysis.
+
+### Team stats (open-source euroleague-api)
+Team ratings and other team-level statistics are calculated with the help of the open-source project:
+- **euroleague-api**  
+  https://github.com/giasemidis/euroleague_api
+
+This helps me make the dataset for team game data throughout the season and is used to determine opponents played so far, through my helper functions, compute opponent Net Rating, and calculate all components required for the Strength of Schedule metrics.
+"""
+    )
+
+    st.markdown("---")
+
+    st.markdown("## Core metrics")
+
+    st.markdown("### Net Rating (NetRtg)")
+    st.markdown(
+        "Net Rating measures how much a team outperforms its opponents per 100 possessions:"
+    )
+    st.latex(r"\text{NetRtg} = \text{OffRtg} - \text{DefRtg}")
+
+    st.markdown(
+        """
+Where:
+- **OffRtg** = points scored per 100 possessions  
+- **DefRtg** = points allowed per 100 possessions  
+
+Interpretation:
+- Higher NetRtg ⇒ stronger team
+- Lower NetRtg ⇒ weaker team
+"""
+    )
+
+    st.markdown("---")
+
+    st.markdown("## Strength of Schedule (Formulas)")
+
+    st.markdown(
+        """
+The following definitions are adapted from **Hack-a-Stat: Learn a Stat: Strength of Schedule ** and applied to EuroLeague data.
+"""
+    )
+
+    st.markdown("### Definitions")
+    st.markdown(
+        """
+- **OppW%**: Opponent Winning Percentage  
+- **TmGP**: Team Games Played  
+- **OppNetRtg**: Opponent Net Rating  
+"""
+    )
+
+    st.markdown("### Opponents’ Winning Percentage (OW%)")
+    st.latex(
+        r"""
+        \text{OW\%} =
+        \frac{\sum_{i=1}^{n} \text{OppW\%}_i}{\text{TmGP}}
+        """
+    )
+
+    st.markdown("### Opponents’ Opponents’ Winning Percentage (OOW%)")
+    st.latex(
+        r"""
+        \text{OOW\%} =
+        \frac{\sum_{i=1}^{n} \text{OW\%}_i}{\text{TmGP}}
+        """
+    )
+
+    st.markdown("### Strength of Schedule — Win% based")
+    st.latex(
+        r"""
+        \text{SoS}_{\text{Win}} =
+        \frac{2 \cdot \text{OW\%} + \text{OOW\%}}{3}
+        """
+    )
+
+    st.markdown(
+        """
+This formulation:
+- Weights direct opponent strength more heavily
+- Reduces volatility compared to raw OppW%
+"""
+    )
+
+    st.markdown("---")
+
+    st.markdown("## Net Rating–based Strength of Schedule")
+
+    st.markdown(
+        """
+The same can be applied using **Net Rating** instead of Win%.
+This is the primary efficiency-based approach used throughout the dashboard.
+"""
+    )
+
+    st.markdown("### Opponents’ Net Rating (OppNetRtg)")
+    st.latex(
+        r"""
+        \text{OppNetRtg} =
+        \frac{\sum_{i=1}^{n} \text{NetRtg}_i}{\text{TmGP}}
+        """
+    )
+
+    st.markdown("### Opponents’ Opponents’ Net Rating (OONetRtg)")
+    st.latex(
+        r"""
+        \text{OONetRtg} =
+        \frac{\sum_{i=1}^{n} \text{OppNetRtg}_i}{\text{TmGP}}
+        """
+    )
+
+    st.markdown("### Strength of Schedule — Net Rating based")
+    st.latex(
+        r"""
+        \text{SoS}_{\text{Net}} =
+        \frac{2 \cdot \text{OppNetRtg} + \text{OONetRtg}}{3}
+        """
+    )
+
+    st.markdown(
+        """
+Why NetRtg-based SoS?
+- Less sensitive to close-game variance
+- More stable early in the season
+- Captures how strong opponents actually are
+"""
+    )
+
+    
+    st.markdown("---")
+
+    st.markdown("## How to interpret the charts")
+
+    st.markdown(
+        """
+### Tab 1: Next-N Games (Logo Table)
+- Left: team logo + team name
+- Middle: Next-N SoS (NetRtg)
+- Right: next N opponents, colored by opponent NetRtg
+
+### Tab 2: SoS(Net) vs NetRtg Scatter + Side Table
+- X-axis: SoS(Net) (reversed: tougher schedules on the left)
+- Y-axis: team NetRtg
+- Side table: top/bottom NetRtg teams with OffRtg/DefRtg
+- Quadrants contextualize performance vs difficulty
+
+### Tab 3: Season SoS Table (NetRtg vs Win%)
+Two SoS estimates per team:
+- NetRtg-based SoS
+- Win%-based SoS
+"""
+    )
+
+    st.markdown("---")
+
+    st.markdown(
+        """
+## Implementation notes
+- Charts are built using **Altair**
+- Team logos are embedded via base64 data URLs
+- Local logo files are loaded from: `team_logos/`
+"""
+    )
+
+    st.markdown(
+        """
+## Limitations (current version)
+Currently locked to:
+- **Competition:** EuroLeague (E)
+- **Season:** 2025
+
+Support for additional competitions and seasons will be added later.
+"""
+    )
+
+with st.expander("Glossary", expanded=False):
+
+    st.markdown(
+        """
+### Team efficiency metrics
+- **OffRtg (Offensive Rating)**: points scored per 100 possessions  
+- **DefRtg (Defensive Rating)**: points allowed per 100 possessions  
+"""
+    )
+
+    st.latex(r"\text{OffRtg} = \frac{\text{Points Scored}}{\text{Possessions}} \times 100")
+    st.latex(r"\text{DefRtg} = \frac{\text{Points Allowed}}{\text{Possessions}} \times 100")
+
+    st.markdown(
+        """
+- **NetRtg (Net Rating)**: efficiency differential per 100 possessions  
+"""
+    )
+
+    st.latex(r"\text{NetRtg} = \text{OffRtg} - \text{DefRtg}")
+
+    st.markdown("---")
+
+    st.markdown(
+        """
+### Strength of Schedule (SoS) helpers — Win% based
+- **OppW%**: opponent winning percentage  
+- **OW%**: average opponent winning percentage  
+"""
+    )
+
+    st.latex(r"\text{OW\%} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{OppW\%}_i")
+
+    st.markdown(
+        """
+- **OOW%**: opponents’ opponents winning percentage  
+"""
+    )
+
+    st.latex(r"\text{OOW\%} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{OW\%}_i")
+
+    st.markdown(
+        """
+- **SoS (Win%)**: weighted opponent difficulty  
+"""
+    )
+
+    st.latex(r"\text{SoS}_{\text{Win}} = \frac{2 \cdot \text{OW\%} + \text{OOW\%}}{3}")
+
+    st.markdown("---")
+
+    st.markdown(
+        """
+### Strength of Schedule (SoS) helpers — Net Rating based
+- **OppNetRtg**: average Net Rating of opponents  
+"""
+    )
+
+    st.latex(r"\text{OppNetRtg} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{NetRtg}_i")
+
+    st.markdown(
+        """
+- **OONetRtg**: opponents’ opponents Net Rating  
+"""
+    )
+
+    st.latex(r"\text{OONetRtg} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{OppNetRtg}_i")
+
+    st.markdown(
+        """
+- **SoS (NetRtg)**: efficiency-based schedule difficulty  
+"""
+    )
+
+    st.latex(r"\text{SoS}_{\text{Net}} = \frac{2 \cdot \text{OppNetRtg} + \text{OONetRtg}}{3}")
+
+
+with st.expander("Run locally", expanded=False):
+        st.markdown(
+            """
+- Ensure the schedule CSV exists:
+  - `EL_2025_26_EL_RS_Schedule.csv`
+- Ensure the logos folder exists:
+  - `team_logos/`
+- Start the app:
+  - `streamlit run app.py`
+"""
+        )
+
+
+
+# =========================================================
 # TAB 1 – Next N Games SoS (build_nextN_altair_logos_table)
 # =========================================================
-with tabs[0]:
+with tabs[1]:
     
     try:
         sos_nextN_df = load_nextN_sos(
@@ -197,7 +497,7 @@ with tabs[0]:
 # TAB 2 – SoS(NetRtg) vs NetRtg scatter + side table
 #          ( make_sos_scatter_and_side_table)
 # =========================================================
-with tabs[1]:
+with tabs[2]:
 
     main_chart, side_table_chart = make_sos_scatter_and_side_table(
         sos_net=sos_net,
@@ -223,7 +523,7 @@ with tabs[1]:
 # =========================================================
 # TAB 3 – Season SoS table (make_sos_table_chart)
 # =========================================================
-with tabs[2]:
+with tabs[3]:
 
     sos_table_chart = make_sos_table_chart(
         sos_net=sos_net,
