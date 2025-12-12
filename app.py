@@ -39,13 +39,12 @@ st.title("EuroLeague Strength of Schedule Dashboard")
 with st.sidebar:
     st.header("Configuration")
 
-    
     season = st.sidebar.selectbox(
         "Season",
         ["2025"],
         index=0,
         disabled=True,
-        help="Only the 2025 season is available at the moment."
+        help="Only the 2025 season is available at the moment.",
     )
 
     competition_code = st.text_input(
@@ -74,14 +73,13 @@ with st.sidebar:
 
 # Schedule path is fixed from config; user cannot change it in the UI
 schedule_path = SCHEDULE_FILENAME
-
 season_label = f"{int(season)}-{(int(season) + 1) % 100:02d}"
 
 
 # ---------------------------------------------------------
 # Cached data loading + core computations
 # ---------------------------------------------------------
-@st.cache_data(show_spinner=True)
+@st.cache_data(show_spinner=False)
 def load_meta_and_ratings(
     season: int,
     competition_code: str,
@@ -91,13 +89,11 @@ def load_meta_and_ratings(
     Load games metadata, compute team ratings up to current_round,
     and season-to-date SoS (NetRtg + Win%).
     """
-    # 1) Games metadata + API object for advanced stats
     games_meta, team_stats_api, _metadata_api = load_games_metadata(
         season=season,
         competition_code=competition_code,
     )
 
-    # 2) Team ratings up to current_round
     team_ratings = compute_team_ratings_up_to_round(
         games_meta=games_meta,
         season=season,
@@ -105,14 +101,12 @@ def load_meta_and_ratings(
         round_max=current_round,
     )
 
-    # 3) Season-to-date SoS based on Net Rating
     sos_net = compute_sos_from_netrtg_up_to_round(
         games_meta=games_meta,
         team_ratings=team_ratings,
         round_max=current_round,
     )
 
-    # 4) Season-to-date SoS based on Win% (returns TEAM_NAME + SoS)
     sos_win = compute_sos_from_winpct_up_to_round(
         games_meta=games_meta,
         round_max=current_round,
@@ -121,12 +115,14 @@ def load_meta_and_ratings(
     return games_meta, team_ratings, sos_net, sos_win
 
 
+# ---- main load (single loading icon, no "Ready." messages) ----
 try:
-    games_meta, team_ratings, sos_net, sos_win = load_meta_and_ratings(
-        season=int(season),
-        competition_code=competition_code,
-        current_round=int(current_round),
-    )
+    with st.spinner("Loading and computing season data…"):
+        games_meta, team_ratings, sos_net, sos_win = load_meta_and_ratings(
+            season=int(season),
+            competition_code=competition_code,
+            current_round=int(current_round),
+        )
 except Exception as e:
     st.error(f"Error loading metadata / computing ratings: {e}")
     st.stop()
@@ -153,22 +149,28 @@ def load_nextN_sos(
 
 
 # ---------------------------------------------------------
-# Tabs
+# Stateful "tabs" (keeps selection on rerun)
 # ---------------------------------------------------------
-tabs = st.tabs(
-    [
-        "Info / About Project",
-        f"Next {int(n_next)} Games SoS",
-        "Strength of Schedule vs Team NetRtg Scatter",
-        "NetRtg & Win% Methods Table",
-    ]
+tab_labels = [
+    "Info / About Project",
+    "Next-N Games SoS",
+    "SoS vs Team NetRtg Scatter",
+    "NetRtg & Win% Methods Table",
+]
+
+selected_tab = st.radio(
+    "Navigation",
+    tab_labels,
+    horizontal=True,
+    label_visibility="collapsed",
+    key="active_tab",
 )
+
 
 # =========================================================
 # TAB 0 – Info / About Project
 # =========================================================
-
-with tabs[0]:
+if selected_tab == "Info / About Project":
     st.subheader(
         "A project to calculate schedule difficulty using team strength and upcoming opponents, based on Team Net Rating."
     )
@@ -209,13 +211,10 @@ This helps me make the dataset for team game data throughout the season and is u
     )
 
     st.markdown("---")
-
     st.markdown("## Core metrics")
 
     st.markdown("### Net Rating (NetRtg)")
-    st.markdown(
-        "Net Rating measures how much a team outperforms its opponents per 100 possessions:"
-    )
+    st.markdown("Net Rating measures how much a team outperforms its opponents per 100 possessions:")
     st.latex(r"\text{NetRtg} = \text{OffRtg} - \text{DefRtg}")
 
     st.markdown(
@@ -231,12 +230,10 @@ Interpretation:
     )
 
     st.markdown("---")
-
     st.markdown("## Strength of Schedule (Formulas)")
-
     st.markdown(
         """
-The following definitions are adapted from **Hack-a-Stat: Learn a Stat: Strength of Schedule ** and applied to EuroLeague data.
+The following definitions are adapted from **Hack-a-Stat: Learn a Stat: Strength of Schedule** and applied to EuroLeague data.
 """
     )
 
@@ -250,28 +247,13 @@ The following definitions are adapted from **Hack-a-Stat: Learn a Stat: Strength
     )
 
     st.markdown("### Opponents’ Winning Percentage (OW%)")
-    st.latex(
-        r"""
-        \text{OW\%} =
-        \frac{\sum_{i=1}^{n} \text{OppW\%}_i}{\text{TmGP}}
-        """
-    )
+    st.latex(r"\text{OW\%} = \frac{\sum_{i=1}^{n} \text{OppW\%}_i}{\text{TmGP}}")
 
     st.markdown("### Opponents’ Opponents’ Winning Percentage (OOW%)")
-    st.latex(
-        r"""
-        \text{OOW\%} =
-        \frac{\sum_{i=1}^{n} \text{OW\%}_i}{\text{TmGP}}
-        """
-    )
+    st.latex(r"\text{OOW\%} = \frac{\sum_{i=1}^{n} \text{OW\%}_i}{\text{TmGP}}")
 
     st.markdown("### Strength of Schedule — Win% based")
-    st.latex(
-        r"""
-        \text{SoS}_{\text{Win}} =
-        \frac{2 \cdot \text{OW\%} + \text{OOW\%}}{3}
-        """
-    )
+    st.latex(r"\text{SoS}_{\text{Win}} = \frac{2 \cdot \text{OW\%} + \text{OOW\%}}{3}")
 
     st.markdown(
         """
@@ -282,9 +264,7 @@ This formulation:
     )
 
     st.markdown("---")
-
     st.markdown("## Net Rating–based Strength of Schedule")
-
     st.markdown(
         """
 The same can be applied using **Net Rating** instead of Win%.
@@ -293,28 +273,13 @@ This is the primary efficiency-based approach used throughout the dashboard.
     )
 
     st.markdown("### Opponents’ Net Rating (OppNetRtg)")
-    st.latex(
-        r"""
-        \text{OppNetRtg} =
-        \frac{\sum_{i=1}^{n} \text{NetRtg}_i}{\text{TmGP}}
-        """
-    )
+    st.latex(r"\text{OppNetRtg} = \frac{\sum_{i=1}^{n} \text{NetRtg}_i}{\text{TmGP}}")
 
     st.markdown("### Opponents’ Opponents’ Net Rating (OONetRtg)")
-    st.latex(
-        r"""
-        \text{OONetRtg} =
-        \frac{\sum_{i=1}^{n} \text{OppNetRtg}_i}{\text{TmGP}}
-        """
-    )
+    st.latex(r"\text{OONetRtg} = \frac{\sum_{i=1}^{n} \text{OppNetRtg}_i}{\text{TmGP}}")
 
     st.markdown("### Strength of Schedule — Net Rating based")
-    st.latex(
-        r"""
-        \text{SoS}_{\text{Net}} =
-        \frac{2 \cdot \text{OppNetRtg} + \text{OONetRtg}}{3}
-        """
-    )
+    st.latex(r"\text{SoS}_{\text{Net}} = \frac{2 \cdot \text{OppNetRtg} + \text{OONetRtg}}{3}")
 
     st.markdown(
         """
@@ -325,11 +290,8 @@ Why NetRtg-based SoS?
 """
     )
 
-    
     st.markdown("---")
-
     st.markdown("## How to interpret the charts")
-
     st.markdown(
         """
 ### Tab 1: Next-N Games (Logo Table)
@@ -351,7 +313,6 @@ Two SoS estimates per team:
     )
 
     st.markdown("---")
-
     st.markdown(
         """
 ## Implementation notes
@@ -372,84 +333,49 @@ Support for additional competitions and seasons will be added later.
 """
     )
 
-with st.expander("Glossary", expanded=False):
-
-    st.markdown(
-        """
+    # ---- Glossary only on Info tab ----
+    with st.expander("Glossary", expanded=False):
+        st.markdown(
+            """
 ### Team efficiency metrics
 - **OffRtg (Offensive Rating)**: points scored per 100 possessions  
 - **DefRtg (Defensive Rating)**: points allowed per 100 possessions  
 """
-    )
+        )
+        st.latex(r"\text{OffRtg} = \frac{\text{Points Scored}}{\text{Possessions}} \times 100")
+        st.latex(r"\text{DefRtg} = \frac{\text{Points Allowed}}{\text{Possessions}} \times 100")
+        st.markdown("- **NetRtg (Net Rating)**: efficiency differential per 100 possessions")
+        st.latex(r"\text{NetRtg} = \text{OffRtg} - \text{DefRtg}")
 
-    st.latex(r"\text{OffRtg} = \frac{\text{Points Scored}}{\text{Possessions}} \times 100")
-    st.latex(r"\text{DefRtg} = \frac{\text{Points Allowed}}{\text{Possessions}} \times 100")
-
-    st.markdown(
-        """
-- **NetRtg (Net Rating)**: efficiency differential per 100 possessions  
-"""
-    )
-
-    st.latex(r"\text{NetRtg} = \text{OffRtg} - \text{DefRtg}")
-
-    st.markdown("---")
-
-    st.markdown(
-        """
+        st.markdown("---")
+        st.markdown(
+            """
 ### Strength of Schedule (SoS) helpers — Win% based
 - **OppW%**: opponent winning percentage  
 - **OW%**: average opponent winning percentage  
 """
-    )
+        )
+        st.latex(r"\text{OW\%} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{OppW\%}_i")
+        st.markdown("- **OOW%**: opponents’ opponents winning percentage")
+        st.latex(r"\text{OOW\%} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{OW\%}_i")
+        st.markdown("- **SoS (Win%)**: weighted opponent difficulty")
+        st.latex(r"\text{SoS}_{\text{Win}} = \frac{2 \cdot \text{OW\%} + \text{OOW\%}}{3}")
 
-    st.latex(r"\text{OW\%} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{OppW\%}_i")
-
-    st.markdown(
-        """
-- **OOW%**: opponents’ opponents winning percentage  
-"""
-    )
-
-    st.latex(r"\text{OOW\%} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{OW\%}_i")
-
-    st.markdown(
-        """
-- **SoS (Win%)**: weighted opponent difficulty  
-"""
-    )
-
-    st.latex(r"\text{SoS}_{\text{Win}} = \frac{2 \cdot \text{OW\%} + \text{OOW\%}}{3}")
-
-    st.markdown("---")
-
-    st.markdown(
-        """
+        st.markdown("---")
+        st.markdown(
+            """
 ### Strength of Schedule (SoS) helpers — Net Rating based
 - **OppNetRtg**: average Net Rating of opponents  
 """
-    )
+        )
+        st.latex(r"\text{OppNetRtg} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{NetRtg}_i")
+        st.markdown("- **OONetRtg**: opponents’ opponents Net Rating")
+        st.latex(r"\text{OONetRtg} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{OppNetRtg}_i")
+        st.markdown("- **SoS (NetRtg)**: efficiency-based schedule difficulty")
+        st.latex(r"\text{SoS}_{\text{Net}} = \frac{2 \cdot \text{OppNetRtg} + \text{OONetRtg}}{3}")
 
-    st.latex(r"\text{OppNetRtg} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{NetRtg}_i")
-
-    st.markdown(
-        """
-- **OONetRtg**: opponents’ opponents Net Rating  
-"""
-    )
-
-    st.latex(r"\text{OONetRtg} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{OppNetRtg}_i")
-
-    st.markdown(
-        """
-- **SoS (NetRtg)**: efficiency-based schedule difficulty  
-"""
-    )
-
-    st.latex(r"\text{SoS}_{\text{Net}} = \frac{2 \cdot \text{OppNetRtg} + \text{OONetRtg}}{3}")
-
-
-with st.expander("Run locally", expanded=False):
+    # ---- Run locally only on Info tab ----
+    with st.expander("Run locally", expanded=False):
         st.markdown(
             """
 - Ensure the schedule CSV exists:
@@ -462,20 +388,28 @@ with st.expander("Run locally", expanded=False):
         )
 
 
-
 # =========================================================
 # TAB 1 – Next N Games SoS (build_nextN_altair_logos_table)
 # =========================================================
-with tabs[1]:
-    
+elif selected_tab == "Next-N Games SoS":
     try:
-        sos_nextN_df = load_nextN_sos(
-            current_round=int(current_round),
-            schedule_path=schedule_path,
-            games_meta=games_meta,
-            team_ratings=team_ratings,
-            n_next=int(n_next),
-        )
+        with st.spinner(f"Computing Next-{int(n_next)} games SoS…"):
+            sos_nextN_df = load_nextN_sos(
+                current_round=int(current_round),
+                schedule_path=schedule_path,
+                games_meta=games_meta,
+                team_ratings=team_ratings,
+                n_next=int(n_next),
+            )
+
+            nextN_chart = build_nextN_altair_logos_table(
+                nextN_df=sos_nextN_df,
+                team_ratings=team_ratings,
+                team_to_logo_path_fn=team_to_logo_path,
+                round_ref=int(current_round),
+                n_next=int(n_next),
+            )
+
     except FileNotFoundError:
         st.error(f"Schedule file not found: {schedule_path}")
         st.stop()
@@ -483,55 +417,44 @@ with tabs[1]:
         st.error(f"Error computing next-N SoS: {e}")
         st.stop()
 
-    nextN_chart = build_nextN_altair_logos_table(
-        nextN_df=sos_nextN_df,
-        team_ratings=team_ratings,
-        team_to_logo_path_fn=team_to_logo_path,
-        round_ref=int(current_round),
-        n_next=int(n_next),
-    )
     st.altair_chart(nextN_chart, width="stretch")
 
 
 # =========================================================
 # TAB 2 – SoS(NetRtg) vs NetRtg scatter + side table
-#          ( make_sos_scatter_and_side_table)
 # =========================================================
-with tabs[2]:
-
-    main_chart, side_table_chart = make_sos_scatter_and_side_table(
-        sos_net=sos_net,
-        team_ratings=team_ratings,
-        team_to_logo_path=team_to_logo_path,
-        logo_to_dataurl=logo_to_dataurl,
-        top_k=5,
-        bottom_k=5,
-        round_ref=int(current_round),
-        season_label=season_label,
-    )
+elif selected_tab == "SoS vs Team NetRtg Scatter":
+    with st.spinner("Building scatter + side table…"):
+        main_chart, side_table_chart = make_sos_scatter_and_side_table(
+            sos_net=sos_net,
+            team_ratings=team_ratings,
+            team_to_logo_path=team_to_logo_path,
+            logo_to_dataurl=logo_to_dataurl,
+            top_k=5,
+            bottom_k=5,
+            round_ref=int(current_round),
+            season_label=season_label,
+        )
 
     col1, col2 = st.columns([3, 2])
-
     with col1:
         st.altair_chart(main_chart, width="stretch")
-
     with col2:
         st.altair_chart(side_table_chart, width="content")
-
 
 
 # =========================================================
 # TAB 3 – Season SoS table (make_sos_table_chart)
 # =========================================================
-with tabs[3]:
+elif selected_tab == "NetRtg & Win% Methods Table":
+    with st.spinner("Building SoS table…"):
+        sos_table_chart = make_sos_table_chart(
+            sos_net=sos_net,
+            sos_win=sos_win,
+            team_to_logo_path=team_to_logo_path,
+            logo_to_dataurl=logo_to_dataurl,
+            round_ref=int(current_round),
+            season_label=season_label,
+        )
 
-    sos_table_chart = make_sos_table_chart(
-        sos_net=sos_net,
-        sos_win=sos_win,
-        team_to_logo_path=team_to_logo_path,
-        logo_to_dataurl=logo_to_dataurl,
-        round_ref=int(current_round),
-        season_label=season_label,
-        # background handled inside make_sos_table_chart ("#a3a1a1")
-    )
     st.altair_chart(sos_table_chart, width="stretch")
