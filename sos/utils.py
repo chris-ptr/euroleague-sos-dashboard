@@ -14,6 +14,57 @@ TEAM_NAME_MAP = {
     # add more aliases here if you want (e.g. Baskonia sponsor variants)
 }
 
+TEAM_ABBREV_MAP = {
+    # Turkey
+    "ANADOLU EFES ISTANBUL": "EFE",
+    "FENERBAHCE BEKO ISTANBUL": "FEN",
+
+    # Spain
+    "FC BARCELONA": "FCB",
+    "REAL MADRID": "RMB",
+    "BASKONIA VITORIA-GASTEIZ": "BKN",
+    "KOSNER BASKONIA VITORIA-GASTEIZ": "BKN",
+    "VALENCIA BASKET": "VAL",
+
+    # Greece
+    "OLYMPIACOS PIRAEUS": "OLY",
+    "PANATHINAIKOS AKTOR ATHENS": "PAO",
+
+    # Israel
+    "MACCABI TEL AVIV": "MTA",
+    "MACCABI RAPYD TEL AVIV": "MTA",
+    "HAPOEL IBI TEL AVIV": "HTA",
+
+    # Serbia
+    "PARTIZAN MOZZART BET BELGRADE": "PAR",
+    "CRVENA ZVEZDA MERIDIANBET BELGRADE": "CZV",
+
+    # Italy
+    "VIRTUS BOLOGNA": "VIR",
+    "EA7 EMPORIO ARMANI MILAN": "MIL",
+
+    # France
+    "AS MONACO": "ASM",
+    "LDLC ASVEL VILLEURBANNE": "ASV",
+    "PARIS BASKETBALL": "PAR",
+
+    # Germany
+    "FC BAYERN MUNICH": "BAY",
+
+    # Lithuania
+    "ZALGIRIS KAUNAS": "ZAL",
+
+    # UAE
+    "DUBAI BASKETBALL": "DUB",
+}
+
+def team_display_name(team: str, mobile: bool) -> str:
+    if not isinstance(team, str):
+        return team
+    if mobile:
+        return TEAM_ABBREV_MAP.get(team, team[:3].upper())
+    return team
+
 
 def normalize_team_name(name: str) -> str:
     """Uppercase and normalise known variants."""

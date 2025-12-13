@@ -2,8 +2,9 @@ import numpy as np
 import pandas as pd
 import altair as alt
 
-from .utils import normalize_team_name, logo_to_dataurl
-from .utils import team_to_logo_path
+from sos.utils import normalize_team_name, logo_to_dataurl
+from sos.utils import team_to_logo_path
+from sos.utils import team_display_name
 
 
 def build_nextN_altair_logos_table(
@@ -20,24 +21,16 @@ def build_nextN_altair_logos_table(
     logo_size_opp: int = 26,
     font_size: int = 15,
     title_font_size: int = 22,
-):
+    mobile_mode: bool = False,
+) -> alt.Chart:
     """
-    Build a table-like Altair chart for the next N games:
+    Build a table-like Altair chart for the next N games.
 
-    - Left column: team logo + team name
-    - Middle column: SoS_Net_nextN (color = green→white→red, text = value)
-    - Right block: next N opponents
-        * cell color = Opp_NetRtg (continuous green→white→red, 0 neutral)
-        * inside each cell: opponent logo only
-
-    Expects nextN_df from make_nextN_sos_table, with columns:
-      - Team
-      - SoS_Net_nextN
-      - Logo_Path   (optional, not strictly required here)
-      - Opp1..OppN
+    IMPORTANT:
+    - Use a unique y-key for sorting/aligning (TEAM_KEY)
+    - Use a separate display label for text (TEAM_LABEL)
     """
 
-    # ---------- STYLE SETTINGS ----------
     ROW_FONT = "Roboto"
     TITLE_FONT = "Arial"
     FONT_SIZE = font_size
@@ -50,7 +43,6 @@ def build_nextN_altair_logos_table(
     LOGO_SIZE_MAIN = logo_size_main
     LOGO_SIZE_OPP = logo_size_opp
 
-
     # ---------- 1) Map team -> NetRtg (for opponent strength) ----------
     ratings = team_ratings.copy()
     ratings["TEAM_NAME"] = ratings["TEAM_NAME"].apply(normalize_team_name)
@@ -62,10 +54,8 @@ def build_nextN_altair_logos_table(
         team_display = row["Team"]
         team_norm = normalize_team_name(team_display)
 
-        # SoS value: prefer SoS_Net_nextN, fallback to legacy SoS_Net_next5 if present
         sos_net = row.get("SoS_Net_nextN", row.get("SoS_Net_next5", np.nan))
 
-        # Team logo
         team_logo_path = team_to_logo_path_fn(team_norm)
         team_logo_dataurl = logo_to_dataurl(team_logo_path)
 
@@ -73,6 +63,7 @@ def build_nextN_altair_logos_table(
             col = f"Opp{idx}"
             if col not in row:
                 continue
+
             opp = row[col]
             if pd.isna(opp) or opp is None or opp == "":
                 continue
@@ -85,10 +76,16 @@ def build_nextN_altair_logos_table(
 
             long_rows.append(
                 {
-                    "Team": team_norm,
-                    "Team_Display": team_display,
+                    # unique + stable key for y-align (normalized full name)
+                    "TEAM_KEY": team_norm,
+                    # label to display (abbr when mobile_mode True)
+                    "TEAM_LABEL": team_display_name(team_norm, mobile_mode),
+                    # keep full display too for tooltip
+                    "TEAM_DISPLAY_FULL": team_display,
+
                     "Team_Logo_DataURL": team_logo_dataurl,
                     "SoS_Net_nextN": sos_net,
+
                     "game_idx": idx,
                     "Opponent": opp_norm,
                     "Opp_NetRtg": opp_netrtg,
@@ -102,27 +99,26 @@ def build_nextN_altair_logos_table(
 
     # ---------- 3) One row per team for left + SoS ----------
     teams_df = (
-        alt_df[["Team", "Team_Display", "Team_Logo_DataURL", "SoS_Net_nextN"]]
-        .drop_duplicates(subset=["Team"])
+        alt_df[["TEAM_KEY", "TEAM_LABEL", "TEAM_DISPLAY_FULL", "Team_Logo_DataURL", "SoS_Net_nextN"]]
+        .drop_duplicates(subset=["TEAM_KEY"])
         .reset_index(drop=True)
     )
 
-    # Sort by SoS hardest → easiest
     team_order = (
-        teams_df.sort_values("SoS_Net_nextN", ascending=False)["Team"].tolist()
+        teams_df.sort_values("SoS_Net_nextN", ascending=False)["TEAM_KEY"].tolist()
     )
 
     teams_df["SoS_Col"] = ""
 
-    # ---------- 4) Left column: logo + team name ----------
+    # ---------- 4) Left column: logo + team label ----------
     logo_mark = (
         alt.Chart(teams_df)
         .mark_image(width=LOGO_SIZE_MAIN, height=LOGO_SIZE_MAIN)
         .encode(
             x=alt.value(0),
-            y=alt.Y("Team:N", sort=team_order, title=None, axis=None),
+            y=alt.Y("TEAM_KEY:N", sort=team_order, title=None, axis=None),
             url="Team_Logo_DataURL:N",
-            tooltip=[alt.Tooltip("Team_Display:N", title="Team")],
+            tooltip=[alt.Tooltip("TEAM_DISPLAY_FULL:N", title="Team")],
         )
         .properties(width=LEFT_COL_WIDTH)
     )
@@ -137,8 +133,8 @@ def build_nextN_altair_logos_table(
         )
         .encode(
             x=alt.value(0),
-            y=alt.Y("Team:N", sort=team_order, title=None, axis=None),
-            text="Team_Display:N",
+            y=alt.Y("TEAM_KEY:N", sort=team_order, title=None, axis=None),
+            text="TEAM_LABEL:N",
         )
     )
 
@@ -148,10 +144,7 @@ def build_nextN_altair_logos_table(
     sos_color = alt.Color(
         "SoS_Net_nextN:Q",
         title="SoS (NetRtg)",
-        scale=alt.Scale(
-            domainMid=0.0,
-            range=["green", "white", "red"],  # easy → neutral → hard
-        ),
+        scale=alt.Scale(domainMid=0.0, range=["green", "white", "red"]),
         legend=None,
     )
 
@@ -160,10 +153,10 @@ def build_nextN_altair_logos_table(
         .mark_rect(stroke="lightgray")
         .encode(
             x=alt.X("SoS_Col:N", title=f"Next {n_next} SoS"),
-            y=alt.Y("Team:N", sort=team_order, title=None, axis=None),
+            y=alt.Y("TEAM_KEY:N", sort=team_order, title=None, axis=None),
             color=sos_color,
             tooltip=[
-                alt.Tooltip("Team_Display:N", title="Team"),
+                alt.Tooltip("TEAM_DISPLAY_FULL:N", title="Team"),
                 alt.Tooltip("SoS_Net_nextN:Q", title="SoS (NetRtg)", format=".2f"),
             ],
         )
@@ -175,7 +168,7 @@ def build_nextN_altair_logos_table(
         .mark_text(size=FONT_SIZE, baseline="middle")
         .encode(
             x=alt.X("SoS_Col:N", title=f"Next {n_next} SoS"),
-            y=alt.Y("Team:N", sort=team_order, title=None, axis=None),
+            y=alt.Y("TEAM_KEY:N", sort=team_order, title=None, axis=None),
             text=alt.Text("SoS_Net_nextN:Q", format=".2f"),
         )
     )
@@ -194,15 +187,11 @@ def build_nextN_altair_logos_table(
         alt.Chart(alt_df)
         .mark_rect(stroke="lightgray")
         .encode(
-            x=alt.X(
-                "game_idx:O",
-                title=f"Next {n_next} Games",
-                axis=alt.Axis(labelAngle=0),
-            ),
-            y=alt.Y("Team:N", sort=team_order, title=None, axis=None),
+            x=alt.X("game_idx:O", title=f"Next {n_next} Games", axis=alt.Axis(labelAngle=0)),
+            y=alt.Y("TEAM_KEY:N", sort=team_order, title=None, axis=None),
             color=opp_color,
             tooltip=[
-                alt.Tooltip("Team_Display:N", title="Team"),
+                alt.Tooltip("TEAM_DISPLAY_FULL:N", title="Team"),
                 alt.Tooltip("game_idx:O", title="#"),
                 alt.Tooltip("Opponent:N", title="Opponent"),
                 alt.Tooltip("Opp_NetRtg:Q", title="Opp NetRtg", format=".2f"),
@@ -217,7 +206,7 @@ def build_nextN_altair_logos_table(
         .mark_image(width=LOGO_SIZE_OPP, height=LOGO_SIZE_OPP)
         .encode(
             x=alt.X("game_idx:O"),
-            y=alt.Y("Team:N", sort=team_order, title=None, axis=None),
+            y=alt.Y("TEAM_KEY:N", sort=team_order, title=None, axis=None),
             url="Opp_Logo_DataURL:N",
         )
     )
@@ -231,12 +220,7 @@ def build_nextN_altair_logos_table(
     )
 
     chart = (
-        alt.hconcat(
-            left_col,
-            sos_col,
-            games_block,
-            spacing=25,
-        )
+        alt.hconcat(left_col, sos_col, games_block, spacing=25)
         .resolve_scale(y="shared")
         .properties(
             title=alt.TitleParams(
@@ -254,17 +238,9 @@ def build_nextN_altair_logos_table(
             labelFontSize=FONT_SIZE,
             titleFontSize=FONT_SIZE,
         )
-        .configure_title(
-            font=TITLE_FONT,
-            fontSize=TITLE_FONT_SIZE,
-        )
-        .configure_text(
-            font=ROW_FONT,
-            fontSize=FONT_SIZE,
-        )
-        .configure_view(
-            stroke=None
-        )
+        .configure_title(font=TITLE_FONT, fontSize=TITLE_FONT_SIZE)
+        .configure_text(font=ROW_FONT, fontSize=FONT_SIZE)
+        .configure_view(stroke=None)
         .configure_legend(
             labelFont=ROW_FONT,
             titleFont=ROW_FONT,
@@ -274,6 +250,7 @@ def build_nextN_altair_logos_table(
     )
 
     return chart
+
 
 def make_sos_table_chart(
     sos_net: pd.DataFrame,
@@ -295,6 +272,7 @@ def make_sos_table_chart(
     value_font_size: int = 11,
     font_size: int = 15,
     title_font_size: int = 18,
+    mobile_mode: bool = False,
 ) -> alt.Chart:
     """
     Build the SoS table (logos + SoS_Net bar + SoS_win bar) as an Altair chart.
@@ -334,6 +312,16 @@ def make_sos_table_chart(
     combined["logo_path"] = combined["TEAM_NAME"].apply(team_to_logo_path)
     combined["logo_url"] = combined["logo_path"].apply(logo_to_dataurl)
 
+    # =========================================================
+    # IMPORTANT FIX:
+    # - Use TEAM_KEY (unique) for ALL y encodings in ALL layers
+    # - Use TEAM_LABEL only for what you display as text
+    # =========================================================
+    combined["TEAM_KEY"] = combined["TEAM_NAME"]  # unique row key
+    combined["TEAM_LABEL"] = combined["TEAM_NAME"].apply(
+        lambda t: team_display_name(t, mobile_mode)
+    )
+
     # --- normalization ---
     min_net = float(combined["SoS_Net"].min())
     max_net = float(combined["SoS_Net"].max())
@@ -355,20 +343,20 @@ def make_sos_table_chart(
         lambda v: norm_with_margin(v, min_win, range_win, margin=0.05)
     )
 
-    team_order = combined["TEAM_NAME"].tolist()
+    # Order must be based on the unique key
+    team_order = combined["TEAM_KEY"].tolist()
 
     # common y scale with padding (for spacing between rows)
     y_scale = alt.Scale(paddingInner=padding_inner, paddingOuter=padding_outer)
 
     # =========================================================
-    # LEFT COLUMN: logo + single team name
+    # LEFT COLUMN: logo + team label
     # =========================================================
-
     logo_col = (
         alt.Chart(combined)
         .mark_image(width=logo_size, height=logo_size)
         .encode(
-            y=alt.Y("TEAM_NAME:N", sort=team_order, scale=y_scale, axis=None),
+            y=alt.Y("TEAM_KEY:N", sort=team_order, scale=y_scale, axis=None),
             x=alt.value(25),
             url="logo_url:N",
         )
@@ -385,9 +373,9 @@ def make_sos_table_chart(
         dx=logo_size + 27,
         fontSize=name_font_size,
     ).encode(
-        y=alt.Y("TEAM_NAME:N", sort=team_order, scale=y_scale, axis=None),
+        y=alt.Y("TEAM_KEY:N", sort=team_order, scale=y_scale, axis=None),
         x=alt.value(0),
-        text="TEAM_NAME:N",
+        text="TEAM_LABEL:N",  # show abbreviated or full label here
     )
 
     left_col = logo_col + name_col
@@ -395,12 +383,11 @@ def make_sos_table_chart(
     # =========================================================
     # MIDDLE COLUMN: SoS (NetRtg)
     # =========================================================
-
     net_bar = alt.Chart(combined).mark_bar(
         stroke="black",
         strokeWidth=0.7,
     ).encode(
-        y=alt.Y("TEAM_NAME:N", sort=team_order, scale=y_scale, axis=None),
+        y=alt.Y("TEAM_KEY:N", sort=team_order, scale=y_scale, axis=None),
         x=alt.X(
             "SoS_Net_norm:Q",
             title=None,
@@ -421,7 +408,7 @@ def make_sos_table_chart(
         align="left",
         baseline="middle",
     ).encode(
-        y=alt.Y("TEAM_NAME:N", sort=team_order, scale=y_scale, axis=None),
+        y=alt.Y("TEAM_KEY:N", sort=team_order, scale=y_scale, axis=None),
         x=alt.X("SoS_Net_norm:Q", scale=alt.Scale(domain=[0, 1])),
         text=alt.Text("SoS_Net:Q", format=".2f"),
     )
@@ -435,12 +422,11 @@ def make_sos_table_chart(
     # =========================================================
     # RIGHT COLUMN: SoS (Win%)
     # =========================================================
-
     win_bar = alt.Chart(combined).mark_bar(
         stroke="black",
         strokeWidth=0.7,
     ).encode(
-        y=alt.Y("TEAM_NAME:N", sort=team_order, scale=y_scale, axis=None),
+        y=alt.Y("TEAM_KEY:N", sort=team_order, scale=y_scale, axis=None),
         x=alt.X(
             "SoS_win_norm:Q",
             title=None,
@@ -461,9 +447,9 @@ def make_sos_table_chart(
         align="left",
         baseline="middle",
     ).encode(
-        y=alt.Y("TEAM_NAME:N", sort=team_order, scale=y_scale, axis=None),
+        y=alt.Y("TEAM_KEY:N", sort=team_order, scale=y_scale, axis=None),
         x=alt.X("SoS_win_norm:Q", scale=alt.Scale(domain=[0, 1])),
-        text=alt.Text("SoS_win:Q", format=".1%")
+        text=alt.Text("SoS_win:Q", format=".1%"),
     )
 
     win_col = (win_bar + win_text).properties(
@@ -475,7 +461,6 @@ def make_sos_table_chart(
     # =========================================================
     # FINAL TABLE
     # =========================================================
-
     sos_table_chart = (
         alt.hconcat(left_col, net_col, win_col)
         .resolve_scale(y="shared")

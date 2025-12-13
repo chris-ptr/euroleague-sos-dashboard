@@ -47,16 +47,12 @@ with st.sidebar:
 
     st.header("Configuration")
 
-    if "mobile_mode" not in st.session_state:
-        st.session_state.mobile_mode = False  # default: OFF (tablet/desktop)
-
     mobile_mode = st.toggle(
         "Mobile layout",
-        value=st.session_state.mobile_mode,
+        key="mobile_mode",
+        value=False,
         help="Uses smaller charts and stack layouts for phones.",
     )
-
-    st.session_state.mobile_mode = mobile_mode
 
     season = st.sidebar.selectbox(
         "Season",
@@ -86,6 +82,7 @@ with st.sidebar:
 
 
 season_label = f"{int(season)}-{(int(season) + 1) % 100:02d}"
+mobile_mode = st.session_state["mobile_mode"]
 
 # ---------------------------------------------------------
 # Responsive presets (fast toggle)
@@ -122,9 +119,9 @@ if not mobile_mode:
 else:
     # Mobile (smaller than tablet)
     NEXTN_KWARGS = dict(
-        left_col_width=165,
-        sos_col_width=85,
-        games_col_width=260,
+        left_col_width=45,
+        sos_col_width=65,
+        games_col_width=240,
         logo_size_main=20,
         logo_size_opp=24,
         font_size=11,
@@ -136,11 +133,11 @@ else:
     SCATTER_TABLE_W, SCATTER_TABLE_H = 380, 550
 
     SEASON_KWARGS = dict(
-        team_col_width=62,
-        net_col_width=145,
-        win_col_width=145,
+        team_col_width=52,
+        net_col_width=90,
+        win_col_width=90,
         logo_size=21,
-        row_height=22,
+        row_height=25,
         name_font_size=11,
         value_font_size=9,
         font_size=11,
@@ -491,6 +488,7 @@ elif selected_tab == "Next-N Games SoS":
             round_ref=int(current_round),
             n_next=int(n_next),
             **NEXTN_KWARGS,
+            mobile_mode=mobile_mode,
         )
         st.altair_chart(nextN_chart, width=NEXTN_STREAMLIT_WIDTH)
 
@@ -548,6 +546,7 @@ elif selected_tab == "NetRtg & Win% Methods Table":
         round_ref=int(current_round),
         season_label=season_label,
         **SEASON_KWARGS,
+        mobile_mode=mobile_mode,
     )
     st.altair_chart(sos_table_chart, width=SEASON_STREAMLIT_WIDTH)
 
