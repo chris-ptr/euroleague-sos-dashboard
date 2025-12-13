@@ -1,7 +1,9 @@
 import streamlit as st
 import pandas as pd
-import streamlit as st
 import streamlit.components.v1 as components
+import time
+from pathlib import Path
+
 
 from sos.config import (
     DEFAULT_SEASON,
@@ -27,6 +29,62 @@ from sos.charts import (
 
 from sos.utils import team_to_logo_path, logo_to_dataurl
 
+CACHE_DIR = Path("cache/rounds")
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+def _make_parquet_safe(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Remove columns that can't be written to Parquet (nested objects like DataFrames),
+    and convert Path-like objects to strings if needed.
+    """
+    df = df.copy()
+
+    # Drop nested / un-serializable columns
+    bad_cols = []
+    for c in df.columns:
+        # anything "object" can hide dicts/dataframes/etc.
+        if df[c].dtype == "object":
+            # if any cell is a DataFrame/list/dict => drop
+            if df[c].apply(lambda x: isinstance(x, (pd.DataFrame, dict, list, tuple, set))).any():
+                bad_cols.append(c)
+
+    if bad_cols:
+        df = df.drop(columns=bad_cols)
+
+    # Convert Path objects to strings if any slipped in
+    for c in df.columns:
+        if df[c].dtype == "object":
+            if df[c].apply(lambda x: hasattr(x, "__fspath__")).any():
+                df[c] = df[c].astype(str)
+
+    return df
+
+
+
+if "data_ready" not in st.session_state:
+    st.session_state.data_ready = False
+
+
+def _init_state():
+    if "base_loaded" not in st.session_state:
+        st.session_state.base_loaded = False
+
+    # Holds per-round computed results:
+    # { round_int: (team_ratings_df, sos_net_df, sos_win_df) }
+    if "round_cache" not in st.session_state:
+        st.session_state.round_cache = {}
+
+    if "precomputed_upto" not in st.session_state:
+        st.session_state.precomputed_upto = 0
+
+    if "precompute_done" not in st.session_state:
+        st.session_state.precompute_done = False
+
+    if "precompute_running" not in st.session_state:
+        st.session_state.precompute_running = False
+
+
+_init_state()
 
 
 # --------------------------------------------------------
@@ -69,14 +127,19 @@ with st.sidebar:
         help='Only "E" (EuroLeague) is available at the moment.',
     )
 
+    LATEST_AVAILABLE_ROUND = DEFAULT_CURRENT_ROUND  # Maybe I should compute it dynamically later
+
     current_round = st.number_input(
         "Current round",
         min_value=1,
-        max_value=40,
-        value=DEFAULT_CURRENT_ROUND,
+        max_value=int(LATEST_AVAILABLE_ROUND),
+        value=min(int(DEFAULT_CURRENT_ROUND), int(LATEST_AVAILABLE_ROUND)),
         step=1,
         help="Enter the latest non completed round number.",
     )
+
+    if current_round == LATEST_AVAILABLE_ROUND:
+        st.caption("Showing data up to the latest available round.")
 
     n_next = st.slider("Number of next games (N)", 1, 10, DEFAULT_N_NEXT, 1)
 
@@ -152,53 +215,80 @@ is_small_screen = mobile_mode
 # ---------------------------------------------------------
 # Cached data loading + core computations
 # ---------------------------------------------------------
-@st.cache_data(show_spinner=False)
-def load_meta_and_ratings(
-    season: int,
-    competition_code: str,
-    current_round: int,
-):
-    """
-    Load games metadata, compute team ratings up to current_round,
-    and season-to-date SoS (NetRtg + Win%).
-    """
-    games_meta, team_stats_api, _metadata_api = load_games_metadata(
-        season=season,
-        competition_code=competition_code,
-    )
-
-    team_ratings = compute_team_ratings_up_to_round(
-        games_meta=games_meta,
-        season=season,
-        team_stats_api=team_stats_api,
-        round_max=current_round,
-    )
-
-    sos_net = compute_sos_from_netrtg_up_to_round(
-        games_meta=games_meta,
-        team_ratings=team_ratings,
-        round_max=current_round,
-    )
-
-    sos_win = compute_sos_from_winpct_up_to_round(
-        games_meta=games_meta,
-        round_max=current_round,
-    )
-
-    return games_meta, team_ratings, sos_net, sos_win
-
-
-# ---- main load (single loading icon, no "Ready." messages) ----
-try:
-    with st.spinner("Loading and computing season data…"):
-        games_meta, team_ratings, sos_net, sos_win = load_meta_and_ratings(
-            season=int(season),
-            competition_code=competition_code,
-            current_round=int(current_round),
+def load_base_data(season: int, competition_code: str):
+    if st.session_state.base_loaded:
+        return (
+            st.session_state.games_meta,
+            st.session_state.team_stats_api,
         )
-except Exception as e:
-    st.error(f"Error loading metadata / computing ratings: {e}")
-    st.stop()
+
+    with st.spinner("Loading base data…"):
+        games_meta, team_stats_api, _metadata_api = load_games_metadata(
+            season=season,
+            competition_code=competition_code,
+        )
+
+    st.session_state.games_meta = games_meta
+    st.session_state.team_stats_api = team_stats_api
+    st.session_state.base_loaded = True
+    return games_meta, team_stats_api
+
+
+games_meta, team_stats_api = load_base_data(
+    season=int(season),
+    competition_code=competition_code,
+)
+
+def compute_for_round(round_max: int):
+    round_max = int(round_max)
+    cache_file = CACHE_DIR / f"round_{round_max}.parquet"
+
+    # 1) Load from disk if exists
+    if cache_file.exists():
+        df = pd.read_parquet(cache_file)
+
+        team_ratings = df[df["TYPE"] == "team_ratings"].drop(columns="TYPE")
+        sos_net = df[df["TYPE"] == "sos_net"].drop(columns="TYPE")
+        sos_win = df[df["TYPE"] == "sos_win"].drop(columns="TYPE")
+
+        return team_ratings, sos_net, sos_win
+
+    # 2) Otherwise compute
+    with st.status(f"Computing metrics for Round {round_max}…", expanded=False):
+        team_ratings = compute_team_ratings_up_to_round(
+            games_meta=games_meta,
+            season=int(season),
+            team_stats_api=team_stats_api,
+            round_max=round_max,
+        )
+
+        sos_net = compute_sos_from_netrtg_up_to_round(
+            games_meta=games_meta,
+            team_ratings=team_ratings,
+            round_max=round_max,
+        )
+
+        sos_win = compute_sos_from_winpct_up_to_round(
+            games_meta=games_meta,
+            round_max=round_max,
+        )
+
+    team_ratings_safe = _make_parquet_safe(team_ratings)
+    sos_net_safe = _make_parquet_safe(sos_net)
+    sos_win_safe = _make_parquet_safe(sos_win)
+
+    out = pd.concat(
+        [
+            team_ratings_safe.assign(TYPE="team_ratings"),
+            sos_net_safe.assign(TYPE="sos_net"),
+            sos_win_safe.assign(TYPE="sos_win"),
+        ],
+        ignore_index=True,
+    )
+
+    out.to_parquet(cache_file, index=False)
+
+    return team_ratings, sos_net, sos_win
 
 
 def load_nextN_sos(
@@ -239,6 +329,35 @@ selected_tab = st.radio(
     key="active_tab",
 )
 
+def warm_cache_upto(default_round: int):
+    default_round = int(default_round)
+
+    # Already done for this session
+    if st.session_state.precompute_done:
+        return
+
+    # Prevent double-running if a rerun happens mid-precompute
+    if st.session_state.precompute_running:
+        return
+
+    st.session_state.precompute_running = True
+
+    start_r = max(1, st.session_state.precomputed_upto + 1)
+    rounds_to_do = list(range(start_r, default_round + 1))
+
+    if rounds_to_do:
+        with st.spinner(f"Precomputing rounds 1 → {default_round}…"):
+            for r in rounds_to_do:
+                compute_for_round(r)
+
+        st.session_state.precomputed_upto = default_round
+
+    st.session_state.precompute_done = True
+    st.session_state.precompute_running = False
+
+
+# Warm cache up to DEFAULT_CURRENT_ROUND (fast slider inside that range)
+warm_cache_upto(DEFAULT_CURRENT_ROUND)
 
 # =========================================================
 # TAB 0 – Info / About Project
@@ -473,6 +592,7 @@ Support for additional competitions and seasons will be added later.
 elif selected_tab == "Next-N Games SoS":
     try:
         with st.spinner(f"Computing Next-{int(n_next)} games SoS…"):
+            team_ratings, sos_net, sos_win = compute_for_round(current_round)
             sos_nextN_df = load_nextN_sos(
                 current_round=int(current_round),
                 schedule_path=schedule_path,
@@ -508,6 +628,7 @@ elif selected_tab == "Next-N Games SoS":
 elif selected_tab == "SoS vs Team NetRtg Scatter":
     
     with st.spinner("Building scatter + side table…"):
+        team_ratings, sos_net, sos_win = compute_for_round(current_round)
         main_chart, side_table_chart = make_sos_scatter_and_side_table(
         sos_net=sos_net,
         team_ratings=team_ratings,
@@ -538,6 +659,7 @@ elif selected_tab == "SoS vs Team NetRtg Scatter":
 # =========================================================
 elif selected_tab == "NetRtg & Win% Methods Table":
     with st.spinner("Building SoS table…"):
+        team_ratings, sos_net, sos_win = compute_for_round(current_round)
         sos_table_chart = make_sos_table_chart(
         sos_net=sos_net,
         sos_win=sos_win,
