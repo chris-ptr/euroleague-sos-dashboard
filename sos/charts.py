@@ -12,6 +12,14 @@ def build_nextN_altair_logos_table(
     team_to_logo_path_fn,
     round_ref: int,
     n_next: int,
+    *,
+    left_col_width: int = 260,
+    sos_col_width: int = 120,
+    games_col_width: int = 340,
+    logo_size_main: int = 24,
+    logo_size_opp: int = 26,
+    font_size: int = 15,
+    title_font_size: int = 22,
 ):
     """
     Build a table-like Altair chart for the next N games:
@@ -32,15 +40,16 @@ def build_nextN_altair_logos_table(
     # ---------- STYLE SETTINGS ----------
     ROW_FONT = "Roboto"
     TITLE_FONT = "Arial"
-    FONT_SIZE = 15
-    TITLE_FONT_SIZE = 18
+    FONT_SIZE = font_size
+    TITLE_FONT_SIZE = title_font_size
 
-    LEFT_COL_WIDTH = 300
-    SOS_COL_WIDTH = 120
-    GAMES_COL_WIDTH = 440
+    LEFT_COL_WIDTH = left_col_width
+    SOS_COL_WIDTH = sos_col_width
+    GAMES_COL_WIDTH = games_col_width
 
-    LOGO_SIZE_MAIN = 24
-    LOGO_SIZE_OPP = 26
+    LOGO_SIZE_MAIN = logo_size_main
+    LOGO_SIZE_OPP = logo_size_opp
+
 
     # ---------- 1) Map team -> NetRtg (for opponent strength) ----------
     ratings = team_ratings.copy()
@@ -279,6 +288,13 @@ def make_sos_table_chart(
     padding_inner: float = 0.35,
     padding_outer: float = 0.10,
     row_height: int = 28,
+    team_col_width: int = 90,
+    net_col_width: int = 220,
+    win_col_width: int = 220,
+    name_font_size: int = 15,
+    value_font_size: int = 11,
+    font_size: int = 15,
+    title_font_size: int = 18,
 ) -> alt.Chart:
     """
     Build the SoS table (logos + SoS_Net bar + SoS_win bar) as an Altair chart.
@@ -290,8 +306,8 @@ def make_sos_table_chart(
     # ---------- fonts to match Next-N chart ----------
     ROW_FONT = "Roboto"
     TITLE_FONT = "Arial"
-    FONT_SIZE = 15
-    TITLE_FONT_SIZE = 18
+    FONT_SIZE = font_size
+    TITLE_FONT_SIZE = title_font_size
 
     # ---------- dynamic title ----------
     if title is None:
@@ -308,7 +324,7 @@ def make_sos_table_chart(
         else:
             title = "EuroLeague Strength of Schedule\n(Net Rating vs Win% Methods)"
 
-    # --- build combined dataframe (same as before) ---
+    # --- build combined dataframe ---
     df_net = sos_net[["TEAM_NAME", "SoS_Net"]].copy()
     df_win = sos_win[["TEAM_NAME", "SoS"]].copy().rename(columns={"SoS": "SoS_win"})
 
@@ -330,7 +346,7 @@ def make_sos_table_chart(
     def norm_with_margin(val, vmin, vrange, margin=0.05):
         raw = (val - vmin) / vrange
         raw = max(0.0, min(1.0, raw))
-        return margin + (1 - 2 * margin) * raw   # e.g. [0.05, 0.95]
+        return margin + (1 - 2 * margin) * raw
 
     combined["SoS_Net_norm"] = combined["SoS_Net"].apply(
         lambda v: norm_with_margin(v, min_net, range_net, margin=0.05)
@@ -348,36 +364,28 @@ def make_sos_table_chart(
     # LEFT COLUMN: logo + single team name
     # =========================================================
 
-    logo_col = alt.Chart(combined).mark_image(
-        width=logo_size,
-        height=logo_size,
-    ).encode(
-        y=alt.Y(
-            "TEAM_NAME:N",
-            sort=team_order,
-            scale=y_scale,
-            axis=None,
-        ),
-        x=alt.value(25),
-        url="logo_url:N",
-    ).properties(
-        width=90,
-        height=row_height * len(combined),
-        title="TEAM",
+    logo_col = (
+        alt.Chart(combined)
+        .mark_image(width=logo_size, height=logo_size)
+        .encode(
+            y=alt.Y("TEAM_NAME:N", sort=team_order, scale=y_scale, axis=None),
+            x=alt.value(25),
+            url="logo_url:N",
+        )
+        .properties(
+            width=team_col_width,
+            height=row_height * len(combined),
+            title="TEAM",
+        )
     )
 
     name_col = alt.Chart(combined).mark_text(
         align="left",
         baseline="middle",
-        dx=logo_size + 27,  # 55 for size 28; scales if you change logo_size
-        fontSize=15,
+        dx=logo_size + 27,
+        fontSize=name_font_size,
     ).encode(
-        y=alt.Y(
-            "TEAM_NAME:N",
-            sort=team_order,
-            scale=y_scale,
-            axis=None,
-        ),
+        y=alt.Y("TEAM_NAME:N", sort=team_order, scale=y_scale, axis=None),
         x=alt.value(0),
         text="TEAM_NAME:N",
     )
@@ -389,15 +397,10 @@ def make_sos_table_chart(
     # =========================================================
 
     net_bar = alt.Chart(combined).mark_bar(
-        stroke="black",      # black outline
+        stroke="black",
         strokeWidth=0.7,
     ).encode(
-        y=alt.Y(
-            "TEAM_NAME:N",
-            sort=team_order,
-            scale=y_scale,
-            axis=None,
-        ),
+        y=alt.Y("TEAM_NAME:N", sort=team_order, scale=y_scale, axis=None),
         x=alt.X(
             "SoS_Net_norm:Q",
             title=None,
@@ -413,23 +416,18 @@ def make_sos_table_chart(
 
     net_text = alt.Chart(combined).mark_text(
         color="black",
-        fontSize=11,
+        fontSize=value_font_size,
         dx=2,
         align="left",
         baseline="middle",
     ).encode(
-        y=alt.Y(
-            "TEAM_NAME:N",
-            sort=team_order,
-            scale=y_scale,
-            axis=None,
-        ),
+        y=alt.Y("TEAM_NAME:N", sort=team_order, scale=y_scale, axis=None),
         x=alt.X("SoS_Net_norm:Q", scale=alt.Scale(domain=[0, 1])),
         text=alt.Text("SoS_Net:Q", format=".2f"),
     )
 
     net_col = (net_bar + net_text).properties(
-        width=220,
+        width=net_col_width,
         height=row_height * len(combined),
         title="SoS (NetRtg)",
     )
@@ -439,15 +437,10 @@ def make_sos_table_chart(
     # =========================================================
 
     win_bar = alt.Chart(combined).mark_bar(
-        stroke="black",      # black outline
+        stroke="black",
         strokeWidth=0.7,
     ).encode(
-        y=alt.Y(
-            "TEAM_NAME:N",
-            sort=team_order,
-            scale=y_scale,
-            axis=None,
-        ),
+        y=alt.Y("TEAM_NAME:N", sort=team_order, scale=y_scale, axis=None),
         x=alt.X(
             "SoS_win_norm:Q",
             title=None,
@@ -463,23 +456,18 @@ def make_sos_table_chart(
 
     win_text = alt.Chart(combined).mark_text(
         color="black",
-        fontSize=11,
+        fontSize=value_font_size,
         dx=2,
         align="left",
         baseline="middle",
     ).encode(
-        y=alt.Y(
-            "TEAM_NAME:N",
-            sort=team_order,
-            scale=y_scale,
-            axis=None,
-        ),
+        y=alt.Y("TEAM_NAME:N", sort=team_order, scale=y_scale, axis=None),
         x=alt.X("SoS_win_norm:Q", scale=alt.Scale(domain=[0, 1])),
-        text=alt.Text("SoS_win:Q", format=".1%"),
+        text=alt.Text("SoS_win:Q", format=".1%")
     )
 
     win_col = (win_bar + win_text).properties(
-        width=220,
+        width=win_col_width,
         height=row_height * len(combined),
         title="SoS (Win%)",
     )
@@ -488,37 +476,39 @@ def make_sos_table_chart(
     # FINAL TABLE
     # =========================================================
 
-    sos_table_chart = alt.hconcat(
-        left_col,
-        net_col,
-        win_col,
-    ).resolve_scale(
-        y="shared",
-    ).properties(
-        title=title,
-        background="#a3a1a1",
-        padding={"left": 20, "right": 20, "top": 20, "bottom": 20},
-    ).configure_axis(
-        labelFont=ROW_FONT,
-        titleFont=ROW_FONT,
-        labelFontSize=FONT_SIZE,
-        titleFontSize=FONT_SIZE,
-    ).configure_title(
-        font=TITLE_FONT,
-        fontSize=TITLE_FONT_SIZE,
-    ).configure_text(
-        font=ROW_FONT,
-        fontSize=FONT_SIZE,
-    ).configure_legend(
-        labelFont=ROW_FONT,
-        titleFont=ROW_FONT,
-        labelFontSize=FONT_SIZE,
-        titleFontSize=FONT_SIZE,
-    ).configure_view(
-        stroke=None,
+    sos_table_chart = (
+        alt.hconcat(left_col, net_col, win_col)
+        .resolve_scale(y="shared")
+        .properties(
+            title=title,
+            background="#a3a1a1",
+            padding={"left": 20, "right": 20, "top": 20, "bottom": 20},
+        )
+        .configure_axis(
+            labelFont=ROW_FONT,
+            titleFont=ROW_FONT,
+            labelFontSize=FONT_SIZE,
+            titleFontSize=FONT_SIZE,
+        )
+        .configure_title(
+            font=TITLE_FONT,
+            fontSize=TITLE_FONT_SIZE,
+        )
+        .configure_text(
+            font=ROW_FONT,
+            fontSize=FONT_SIZE,
+        )
+        .configure_legend(
+            labelFont=ROW_FONT,
+            titleFont=ROW_FONT,
+            labelFontSize=FONT_SIZE,
+            titleFontSize=FONT_SIZE,
+        )
+        .configure_view(stroke=None)
     )
 
     return sos_table_chart
+
 
 # Function to have both tables on the sos scatter
 def make_sos_scatter_and_side_table(
@@ -533,6 +523,10 @@ def make_sos_scatter_and_side_table(
     season_label: str | None = None,
     title: str | None = None,
     background: str = "#a3a1a1",
+    main_w: int = 720,
+    main_h: int = 560,
+    table_w: int = 350,
+    table_h: int = 560,
 ) -> tuple[alt.Chart, alt.Chart]:
     """
     Build SoS(NetRtg) vs NetRtg scatter + side table,
@@ -692,8 +686,8 @@ def make_sos_scatter_and_side_table(
         + label_layer
         + quad_layer
     ).properties(
-        width=720,
-        height=560,
+        width=main_w,
+        height=main_h,
         title=title,
         background=background,
         padding={"left": 20, "right": 20, "top": 20, "bottom": 20},
@@ -770,8 +764,8 @@ def make_sos_scatter_and_side_table(
     )
 
     table_chart = (logo_col + text_col).properties(
-        width=350,
-        height=560,
+        width=table_w,
+        height=table_h,
         title=f"Top {top_k} / Bottom {bottom_k} Net Ratings",
         background=background,
         padding={"left": 20, "right": 20, "top": 20, "bottom": 20},

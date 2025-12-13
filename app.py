@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import streamlit as st
+import streamlit.components.v1 as components
 
 from sos.config import (
     DEFAULT_SEASON,
@@ -26,18 +28,35 @@ from sos.charts import (
 from sos.utils import team_to_logo_path, logo_to_dataurl
 
 
-# ---------------------------------------------------------
+
+# --------------------------------------------------------
 # Streamlit page config
 # ---------------------------------------------------------
 st.set_page_config(page_title="EuroLeague SoS Dashboard", layout="wide")
 st.title("EuroLeague Strength of Schedule Dashboard")
 
 
+
+# Schedule path is fixed from config; user cannot change it in the UI
+schedule_path = SCHEDULE_FILENAME
+
 # ---------------------------------------------------------
 # Sidebar configuration
 # ---------------------------------------------------------
 with st.sidebar:
+
     st.header("Configuration")
+
+    if "mobile_mode" not in st.session_state:
+        st.session_state.mobile_mode = False  # default: OFF (tablet/desktop)
+
+    mobile_mode = st.toggle(
+        "Mobile layout",
+        value=st.session_state.mobile_mode,
+        help="Uses smaller charts and stack layouts for phones.",
+    )
+
+    st.session_state.mobile_mode = mobile_mode
 
     season = st.sidebar.selectbox(
         "Season",
@@ -63,18 +82,75 @@ with st.sidebar:
         help="Enter the latest non completed round number.",
     )
 
-    n_next = st.slider(
-        "Number of next games (N)",
-        min_value=1,
-        max_value=10,
-        value=DEFAULT_N_NEXT,
-        step=1,
-    )
+    n_next = st.slider("Number of next games (N)", 1, 10, DEFAULT_N_NEXT, 1)
 
-# Schedule path is fixed from config; user cannot change it in the UI
-schedule_path = SCHEDULE_FILENAME
+
 season_label = f"{int(season)}-{(int(season) + 1) % 100:02d}"
 
+# ---------------------------------------------------------
+# Responsive presets (fast toggle)
+# ---------------------------------------------------------
+if not mobile_mode:
+    # Tablet / Default
+    NEXTN_KWARGS = dict(
+        left_col_width=320,
+        sos_col_width=110,
+        games_col_width=500,
+        logo_size_main=24,
+        logo_size_opp=24,
+        font_size=14,
+        title_font_size=19,
+    )
+    NEXTN_STREAMLIT_WIDTH = "stretch"
+
+    SCATTER_MAIN_W, SCATTER_MAIN_H = 560, 600
+    SCATTER_TABLE_W, SCATTER_TABLE_H = 380, 600
+
+    SEASON_KWARGS = dict(
+        team_col_width=80,
+        net_col_width=190,
+        win_col_width=190,
+        logo_size=24,
+        row_height=26,
+        name_font_size=13,
+        value_font_size=10,
+        font_size=13,
+        title_font_size=16,
+    )
+    SEASON_STREAMLIT_WIDTH = "stretch"
+
+else:
+    # Mobile (smaller than tablet)
+    NEXTN_KWARGS = dict(
+        left_col_width=165,
+        sos_col_width=85,
+        games_col_width=260,
+        logo_size_main=20,
+        logo_size_opp=24,
+        font_size=11,
+        title_font_size=13,
+    )
+    NEXTN_STREAMLIT_WIDTH = "content"  # allow horizontal scroll
+
+    SCATTER_MAIN_W, SCATTER_MAIN_H = 380, 550
+    SCATTER_TABLE_W, SCATTER_TABLE_H = 380, 550
+
+    SEASON_KWARGS = dict(
+        team_col_width=62,
+        net_col_width=145,
+        win_col_width=145,
+        logo_size=21,
+        row_height=22,
+        name_font_size=11,
+        value_font_size=9,
+        font_size=11,
+        title_font_size=13,
+    )
+    SEASON_STREAMLIT_WIDTH = "content"  # allow scroll
+
+
+# Treat mobile_mode as phone/tablet layout
+is_small_screen = mobile_mode
 
 # ---------------------------------------------------------
 # Cached data loading + core computations
@@ -171,9 +247,15 @@ selected_tab = st.radio(
 # TAB 0 – Info / About Project
 # =========================================================
 if selected_tab == "Info / About Project":
-    st.subheader(
-        "A project to calculate schedule difficulty using team strength and upcoming opponents, based on Team Net Rating."
-    )
+    
+    if not is_small_screen:
+        st.info(
+            "**Viewing on a small screen?**\n\n"
+            "This dashboard supports a **Mobile layout** for phones and tablets.\n\n"
+            "You can enable or disable it at any time from the **sidebar → Mobile layout** toggle "
+            "to optimize chart sizes and layout for your device.",
+            icon="ℹ️",
+        )
 
     st.markdown(
         """
@@ -403,12 +485,15 @@ elif selected_tab == "Next-N Games SoS":
             )
 
             nextN_chart = build_nextN_altair_logos_table(
-                nextN_df=sos_nextN_df,
-                team_ratings=team_ratings,
-                team_to_logo_path_fn=team_to_logo_path,
-                round_ref=int(current_round),
-                n_next=int(n_next),
-            )
+            nextN_df=sos_nextN_df,
+            team_ratings=team_ratings,
+            team_to_logo_path_fn=team_to_logo_path,
+            round_ref=int(current_round),
+            n_next=int(n_next),
+            **NEXTN_KWARGS,
+        )
+        st.altair_chart(nextN_chart, width=NEXTN_STREAMLIT_WIDTH)
+
 
     except FileNotFoundError:
         st.error(f"Schedule file not found: {schedule_path}")
@@ -417,31 +502,38 @@ elif selected_tab == "Next-N Games SoS":
         st.error(f"Error computing next-N SoS: {e}")
         st.stop()
 
-    st.altair_chart(nextN_chart, width="stretch")
 
 
 # =========================================================
 # TAB 2 – SoS(NetRtg) vs NetRtg scatter + side table
 # =========================================================
 elif selected_tab == "SoS vs Team NetRtg Scatter":
+    
     with st.spinner("Building scatter + side table…"):
         main_chart, side_table_chart = make_sos_scatter_and_side_table(
-            sos_net=sos_net,
-            team_ratings=team_ratings,
-            team_to_logo_path=team_to_logo_path,
-            logo_to_dataurl=logo_to_dataurl,
-            top_k=5,
-            bottom_k=5,
-            round_ref=int(current_round),
-            season_label=season_label,
-        )
+        sos_net=sos_net,
+        team_ratings=team_ratings,
+        team_to_logo_path=team_to_logo_path,
+        logo_to_dataurl=logo_to_dataurl,
+        top_k=5,
+        bottom_k=5,
+        round_ref=int(current_round),
+        season_label=season_label,
+        main_w=SCATTER_MAIN_W,
+        main_h=SCATTER_MAIN_H,
+        table_w=SCATTER_TABLE_W,
+        table_h=SCATTER_TABLE_H,
+    )
 
-    col1, col2 = st.columns([3, 2])
-    with col1:
+    if mobile_mode:
         st.altair_chart(main_chart, width="stretch")
-    with col2:
-        st.altair_chart(side_table_chart, width="content")
-
+        st.altair_chart(side_table_chart, width="stretch")
+    else:
+        col1, col2 = st.columns([3, 2])
+        with col1:
+            st.altair_chart(main_chart, width="stretch")
+        with col2:
+            st.altair_chart(side_table_chart, width="content")
 
 # =========================================================
 # TAB 3 – Season SoS table (make_sos_table_chart)
@@ -449,12 +541,14 @@ elif selected_tab == "SoS vs Team NetRtg Scatter":
 elif selected_tab == "NetRtg & Win% Methods Table":
     with st.spinner("Building SoS table…"):
         sos_table_chart = make_sos_table_chart(
-            sos_net=sos_net,
-            sos_win=sos_win,
-            team_to_logo_path=team_to_logo_path,
-            logo_to_dataurl=logo_to_dataurl,
-            round_ref=int(current_round),
-            season_label=season_label,
-        )
+        sos_net=sos_net,
+        sos_win=sos_win,
+        team_to_logo_path=team_to_logo_path,
+        logo_to_dataurl=logo_to_dataurl,
+        round_ref=int(current_round),
+        season_label=season_label,
+        **SEASON_KWARGS,
+    )
+    st.altair_chart(sos_table_chart, width=SEASON_STREAMLIT_WIDTH)
 
-    st.altair_chart(sos_table_chart, width="stretch")
+
