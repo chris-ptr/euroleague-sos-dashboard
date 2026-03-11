@@ -652,7 +652,7 @@ elif selected_tab == "SoS vs Team NetRtg Scatter":
         with col1:
             st.altair_chart(main_chart, width="stretch")
         with col2:
-            st.altair_chart(side_table_chart, width="content")
+            st.altair_chart(side_table_chart, width="stretch")
 
 # =========================================================
 # TAB 3 – Season SoS table (make_sos_table_chart)
