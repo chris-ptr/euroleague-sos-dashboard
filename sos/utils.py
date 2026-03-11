@@ -7,58 +7,40 @@ import pandas as pd
 from .config import TEAM_LOGO_DIR
 
 
-# 1) TEAM_NAME normalization (from your notebook)
+# Normalized name mapping for consistency across API and schedule sources
 TEAM_NAME_MAP = {
     "MACCABI RAPYD TEL AVIV": "MACCABI TEL AVIV",
     "KOSNER BASKONIA VITORIA-GASTEIZ": "BASKONIA VITORIA-GASTEIZ",
-    # add more aliases here if you want (e.g. Baskonia sponsor variants)
 }
 
+# 3-letter abbreviations for mobile/compact views
 TEAM_ABBREV_MAP = {
-    # Turkey
     "ANADOLU EFES ISTANBUL": "EFE",
     "FENERBAHCE BEKO ISTANBUL": "FEN",
-
-    # Spain
     "FC BARCELONA": "FCB",
     "REAL MADRID": "RMB",
     "BASKONIA VITORIA-GASTEIZ": "BKN",
     "KOSNER BASKONIA VITORIA-GASTEIZ": "BKN",
     "VALENCIA BASKET": "VAL",
-
-    # Greece
     "OLYMPIACOS PIRAEUS": "OLY",
     "PANATHINAIKOS AKTOR ATHENS": "PAO",
-
-    # Israel
     "MACCABI TEL AVIV": "MTA",
     "MACCABI RAPYD TEL AVIV": "MTA",
     "HAPOEL IBI TEL AVIV": "HTA",
-
-    # Serbia
     "PARTIZAN MOZZART BET BELGRADE": "PAR",
     "CRVENA ZVEZDA MERIDIANBET BELGRADE": "CZV",
-
-    # Italy
     "VIRTUS BOLOGNA": "VIR",
     "EA7 EMPORIO ARMANI MILAN": "MIL",
-
-    # France
     "AS MONACO": "ASM",
     "LDLC ASVEL VILLEURBANNE": "ASV",
     "PARIS BASKETBALL": "PAR",
-
-    # Germany
     "FC BAYERN MUNICH": "BAY",
-
-    # Lithuania
     "ZALGIRIS KAUNAS": "ZAL",
-
-    # UAE
     "DUBAI BASKETBALL": "DUB",
 }
 
 def team_display_name(team: str, mobile: bool) -> str:
+    """Return full name or abbreviation based on UI context."""
     if not isinstance(team, str):
         return team
     if mobile:
@@ -67,14 +49,14 @@ def team_display_name(team: str, mobile: bool) -> str:
 
 
 def normalize_team_name(name: str) -> str:
-    """Uppercase and normalise known variants."""
+    """Standardize casing and apply alias mapping."""
     if pd.isna(name):
         return name
     name = str(name).strip().upper()
     return TEAM_NAME_MAP.get(name, name)
 
 
-# 2) Map TEAM_NAME -> logo filename (your dict)
+# Static mapping for local logo files
 team_logo_file = {
     "ANADOLU EFES ISTANBUL": "Anadolu Efes_logo.png",
     "KOSNER BASKONIA VITORIA-GASTEIZ": "Baskonia_logo.png",
@@ -100,17 +82,11 @@ team_logo_file = {
     "VALENCIA BASKET": "Valencia_logo.png",
 }
 
-# base dir (string)
-logos_dir = str(TEAM_LOGO_DIR)  # TEAM_LOGO_DIR is "team_logos" in config.py
+logos_dir = str(TEAM_LOGO_DIR)
 
 
 def team_to_logo_path(team_name: str) -> Optional[str]:
-    """
-    Map team name -> logo path as STRING (like your notebook).
-
-    We normalise first so "MACCABI RAPYD TEL AVIV" becomes "MACCABI TEL AVIV",
-    then look it up in team_logo_file.
-    """
+    """Resolve team name to local logo filesystem path."""
     key = normalize_team_name(team_name)
     fname = team_logo_file.get(key)
     if fname is None:
@@ -120,7 +96,7 @@ def team_to_logo_path(team_name: str) -> Optional[str]:
 
 
 def logo_to_dataurl(path: str | None) -> str | None:
-    """Convert a local image file to a data URL for embedding in Altair exports."""
+    """Encode local image to base64 DataURL for Altair embedding."""
     if not path or not isinstance(path, str):
         return None
     if not os.path.exists(path):
@@ -128,5 +104,4 @@ def logo_to_dataurl(path: str | None) -> str | None:
     with open(path, "rb") as f:
         data = f.read()
     b64 = base64.b64encode(data).decode("utf-8")
-    # Use generic PNG MIME; works fine for most logos
     return f"data:image/png;base64,{b64}"

@@ -61,6 +61,7 @@ def _make_parquet_safe(df: pd.DataFrame) -> pd.DataFrame:
 
 
 
+# Persistent app state
 if "data_ready" not in st.session_state:
     st.session_state.data_ready = False
 
@@ -69,8 +70,7 @@ def _init_state():
     if "base_loaded" not in st.session_state:
         st.session_state.base_loaded = False
 
-    # Holds per-round computed results:
-    # { round_int: (team_ratings_df, sos_net_df, sos_win_df) }
+    # Cache for per-round SOS metrics: { round: (ratings, sos_net, sos_win) }
     if "round_cache" not in st.session_state:
         st.session_state.round_cache = {}
 
@@ -87,20 +87,16 @@ def _init_state():
 _init_state()
 
 
-# --------------------------------------------------------
-# Streamlit page config
-# ---------------------------------------------------------
+# Page setup
 st.set_page_config(page_title="EuroLeague SoS Dashboard", layout="wide")
 st.title("EuroLeague Strength of Schedule Dashboard")
 
 
 
-# Schedule path is fixed from config; user cannot change it in the UI
+# Local schedule file path
 schedule_path = SCHEDULE_FILENAME
 
-# ---------------------------------------------------------
-# Sidebar configuration
-# ---------------------------------------------------------
+# Sidebar filters and settings
 with st.sidebar:
 
     st.header("Configuration")
@@ -109,7 +105,7 @@ with st.sidebar:
         "Mobile layout",
         key="mobile_mode",
         value=False,
-        help="Uses smaller charts and stack layouts for phones.",
+        help="Adjusts chart dimensions and layout for smaller screens.",
     )
 
     season = st.sidebar.selectbox(
@@ -117,17 +113,17 @@ with st.sidebar:
         ["2025"],
         index=0,
         disabled=True,
-        help="Only the 2025 season is available at the moment.",
+        help="Only 2025 season is currently supported.",
     )
 
     competition_code = st.text_input(
         "Competition code",
         value=DEFAULT_COMPETITION,
         disabled=True,
-        help='Only "E" (EuroLeague) is available at the moment.',
+        help='Defaults to EuroLeague (E).',
     )
 
-    LATEST_AVAILABLE_ROUND = DEFAULT_CURRENT_ROUND  # Maybe I should compute it dynamically later
+    LATEST_AVAILABLE_ROUND = DEFAULT_CURRENT_ROUND
 
     current_round = st.number_input(
         "Current round",
@@ -135,7 +131,7 @@ with st.sidebar:
         max_value=int(LATEST_AVAILABLE_ROUND),
         value=min(int(DEFAULT_CURRENT_ROUND), int(LATEST_AVAILABLE_ROUND)),
         step=1,
-        help="Enter the latest non completed round number.",
+        help="Select the latest round to include in calculations.",
     )
 
     if current_round == LATEST_AVAILABLE_ROUND:
@@ -147,11 +143,9 @@ with st.sidebar:
 season_label = f"{int(season)}-{(int(season) + 1) % 100:02d}"
 mobile_mode = st.session_state["mobile_mode"]
 
-# ---------------------------------------------------------
-# Responsive presets (fast toggle)
-# ---------------------------------------------------------
+# Responsive chart presets
 if not mobile_mode:
-    # Tablet / Default
+    # Desktop / Tablet
     NEXTN_KWARGS = dict(
         left_col_width=320,
         sos_col_width=110,
@@ -179,7 +173,7 @@ if not mobile_mode:
     )
     SEASON_STREAMLIT_WIDTH = None
 else:
-    # Mobile (smaller than tablet)
+    # Mobile
     NEXTN_KWARGS = dict(
         left_col_width=45,
         sos_col_width=65,
@@ -189,7 +183,7 @@ else:
         font_size=11,
         title_font_size=13,
     )
-    NEXTN_STREAMLIT_WIDTH = "content"  # allow horizontal scroll
+    NEXTN_STREAMLIT_WIDTH = "content"
 
     SCATTER_MAIN_W, SCATTER_MAIN_H = 380, 550
     SCATTER_TABLE_W, SCATTER_TABLE_H = 380, 550
@@ -205,15 +199,12 @@ else:
         font_size=11,
         title_font_size=13,
     )
-    SEASON_STREAMLIT_WIDTH = None  # allow scroll
+    SEASON_STREAMLIT_WIDTH = None
 
 
-# Treat mobile_mode as phone/tablet layout
 is_small_screen = mobile_mode
 
-# ---------------------------------------------------------
-# Cached data loading + core computations
-# ---------------------------------------------------------
+# Data loading and core processing
 def load_base_data(season: int, competition_code: str):
     if st.session_state.base_loaded:
         return (
@@ -221,7 +212,7 @@ def load_base_data(season: int, competition_code: str):
             st.session_state.team_stats_api,
         )
 
-    with st.spinner("Loading base data…"):
+    with st.spinner("Fetching API data..."):
         games_meta, team_stats_api, _metadata_api = load_games_metadata(
             season=season,
             competition_code=competition_code,
@@ -242,7 +233,7 @@ def compute_for_round(round_max: int):
     round_max = int(round_max)
     cache_file = CACHE_DIR / f"round_{round_max}.parquet"
 
-    # 1) Load from disk if exists
+    # Try loading from local cache
     if cache_file.exists():
         df = pd.read_parquet(cache_file)
 
@@ -252,8 +243,8 @@ def compute_for_round(round_max: int):
 
         return team_ratings, sos_net, sos_win
 
-    # 2) Otherwise compute
-    with st.status(f"Computing metrics for Round {round_max}…", expanded=False):
+    # Compute metrics from scratch
+    with st.status(f"Calculating Round {round_max} metrics...", expanded=False):
         team_ratings = compute_team_ratings_up_to_round(
             games_meta=games_meta,
             season=int(season),
@@ -297,10 +288,7 @@ def load_nextN_sos(
     team_ratings: pd.DataFrame,
     n_next: int,
 ):
-    """
-    Wrapper around make_nextN_sos_table.
-    Not cached to avoid hashing DataFrames in Streamlit.
-    """
+    """Calculate SOS for the upcoming N games."""
     return make_nextN_sos_table(
         current_round=current_round,
         schedule_path=schedule_path,
@@ -310,9 +298,7 @@ def load_nextN_sos(
     )
 
 
-# ---------------------------------------------------------
-# Stateful "tabs" (keeps selection on rerun)
-# ---------------------------------------------------------
+# Navigation logic
 tab_labels = [
     "Info / About Project",
     "Next-N Games SoS",
@@ -331,12 +317,7 @@ selected_tab = st.radio(
 def warm_cache_upto(default_round: int):
     default_round = int(default_round)
 
-    # Already done for this session
-    if st.session_state.precompute_done:
-        return
-
-    # Prevent double-running if a rerun happens mid-precompute
-    if st.session_state.precompute_running:
+    if st.session_state.precompute_done or st.session_state.precompute_running:
         return
 
     st.session_state.precompute_running = True
@@ -345,7 +326,7 @@ def warm_cache_upto(default_round: int):
     rounds_to_do = list(range(start_r, default_round + 1))
 
     if rounds_to_do:
-        with st.spinner(f"Precomputing rounds 1 → {default_round}…"):
+        with st.spinner(f"Precomputing rounds 1 → {default_round}..."):
             for r in rounds_to_do:
                 compute_for_round(r)
 
@@ -355,20 +336,17 @@ def warm_cache_upto(default_round: int):
     st.session_state.precompute_running = False
 
 
-# Warm cache up to DEFAULT_CURRENT_ROUND (fast slider inside that range)
+# Background precomputation
 warm_cache_upto(DEFAULT_CURRENT_ROUND)
 
-# =========================================================
-# TAB 0 – Info / About Project
-# =========================================================
+# --- Tab 0: Project Info ---
 if selected_tab == "Info / About Project":
     
     if not is_small_screen:
         st.info(
             "**Viewing on a small screen?**\n\n"
             "This dashboard supports a **Mobile layout** for phones and tablets.\n\n"
-            "You can enable or disable it at any time from the **sidebar → Mobile layout** toggle "
-            "to optimize chart sizes and layout for your device.",
+            "Toggle it in the **sidebar** to optimize chart sizes for your device.",
             icon="ℹ️",
         )
 
@@ -392,18 +370,18 @@ The objective is to contextualize team performance by answering:
         """
 ## Data sources
 
-### Schedule (official EuroLeague PDF → parsed)
-The Regular Season schedule was parsed from the **official EuroLeague schedule PDF** and exported into:
+### Schedule (Parsed PDF)
+The Regular Season schedule was parsed from official EuroLeague documents:
 - `EL_2025_26_EL_RS_Schedule.csv`
 
-This file is used to determine future opponents for the **Next-N** analysis.
+Used for forecasting future opponent difficulty.
 
-### Team stats (open-source euroleague-api)
-Team ratings and other team-level statistics are calculated with the help of the open-source project:
+### Team stats (euroleague-api)
+Historical performance data fetched via the open-source wrapper:
 - **euroleague-api**  
   https://github.com/giasemidis/euroleague_api
 
-This helps me make the dataset for team game data throughout the season and is used to determine opponents played so far, through my helper functions, compute opponent Net Rating, and calculate all components required for the Strength of Schedule metrics.
+This powers our possession-based efficiency metrics and historical SOS calculations.
 """
     )
 
@@ -411,7 +389,7 @@ This helps me make the dataset for team game data throughout the season and is u
     st.markdown("## Core metrics")
 
     st.markdown("### Net Rating (NetRtg)")
-    st.markdown("Net Rating measures how much a team outperforms its opponents per 100 possessions:")
+    st.markdown("Measures points differential per 100 possessions:")
     st.latex(r"\text{NetRtg} = \text{OffRtg} - \text{DefRtg}")
 
     st.markdown(
@@ -430,7 +408,7 @@ Interpretation:
     st.markdown("## Strength of Schedule (Formulas)")
     st.markdown(
         """
-The following definitions are adapted from **Hack-a-Stat: Learn a Stat: Strength of Schedule** and applied to EuroLeague data.
+Adapted from **Hack-a-Stat** methodology and applied to EuroLeague datasets.
 """
     )
 
@@ -454,9 +432,7 @@ The following definitions are adapted from **Hack-a-Stat: Learn a Stat: Strength
 
     st.markdown(
         """
-This formulation:
-- Weights direct opponent strength more heavily
-- Reduces volatility compared to raw OppW%
+This formula weights direct opponent strength more heavily while reducing noise via secondary opponent metrics.
 """
     )
 
@@ -464,8 +440,7 @@ This formulation:
     st.markdown("## Net Rating–based Strength of Schedule")
     st.markdown(
         """
-The same can be applied using **Net Rating** instead of Win%.
-This is the primary efficiency-based approach used throughout the dashboard.
+Same logic applied to **Net Rating** for an efficiency-based approach.
 """
     )
 
@@ -480,10 +455,7 @@ This is the primary efficiency-based approach used throughout the dashboard.
 
     st.markdown(
         """
-Why NetRtg-based SoS?
-- Less sensitive to close-game variance
-- More stable early in the season
-- Captures how strong opponents actually are
+Efficiency-based SOS is less sensitive to close-game variance and remains more stable early in the season.
 """
     )
 
@@ -492,20 +464,15 @@ Why NetRtg-based SoS?
     st.markdown(
         """
 ### Tab 1: Next-N Games (Logo Table)
-- Left: team logo + team name
-- Middle: Next-N SoS (NetRtg)
-- Right: next N opponents, colored by opponent NetRtg
+- Forecasts upcoming SOS difficulty.
+- Color-coded cells represent opponent strength (NetRtg).
 
-### Tab 2: SoS(Net) vs NetRtg Scatter + Side Table
-- X-axis: SoS(Net) (reversed: tougher schedules on the left)
-- Y-axis: team NetRtg
-- Side table: top/bottom NetRtg teams with OffRtg/DefRtg
-- Quadrants contextualize performance vs difficulty
+### Tab 2: SoS(Net) vs NetRtg Scatter
+- Contextualizes team performance against schedule difficulty.
+- Quadrants highlight overachievers and schedule outliers.
 
-### Tab 3: Season SoS Table (NetRtg vs Win%)
-Two SoS estimates per team:
-- NetRtg-based SoS
-- Win%-based SoS
+### Tab 3: Season SoS Table
+- Comparison between NetRtg-based and Win%-based SOS estimates.
 """
     )
 
@@ -513,84 +480,81 @@ Two SoS estimates per team:
     st.markdown(
         """
 ## Implementation notes
-- Charts are built using **Altair**
-- Team logos are embedded via base64 data URLs
-- Local logo files are loaded from: `team_logos/`
+- Visualization layer: **Altair**
+- Assets: Base64 embedded team logos from `team_logos/`
+- Data persistence: Parquet-based local caching
 """
     )
 
     st.markdown(
         """
-## Limitations (current version)
-Currently locked to:
+## Roadmap / Limitations
+Current scope:
 - **Competition:** EuroLeague (E)
 - **Season:** 2025
 
-Support for additional competitions and seasons will be added later.
+Future updates will include EuroCup support and historical seasonal analysis.
 """
     )
 
-    # ---- Glossary only on Info tab ----
+    # Glossary section
     with st.expander("Glossary", expanded=False):
         st.markdown(
             """
 ### Team efficiency metrics
-- **OffRtg (Offensive Rating)**: points scored per 100 possessions  
-- **DefRtg (Defensive Rating)**: points allowed per 100 possessions  
+- **OffRtg**: points scored per 100 possessions  
+- **DefRtg**: points allowed per 100 possessions  
 """
         )
         st.latex(r"\text{OffRtg} = \frac{\text{Points Scored}}{\text{Possessions}} \times 100")
         st.latex(r"\text{DefRtg} = \frac{\text{Points Allowed}}{\text{Possessions}} \times 100")
-        st.markdown("- **NetRtg (Net Rating)**: efficiency differential per 100 possessions")
+        st.markdown("- **NetRtg**: efficiency differential per 100 possessions")
         st.latex(r"\text{NetRtg} = \text{OffRtg} - \text{DefRtg}")
 
         st.markdown("---")
         st.markdown(
             """
-### Strength of Schedule (SoS) helpers — Win% based
-- **OppW%**: opponent winning percentage  
-- **OW%**: average opponent winning percentage  
+### SOS Metrics (Win% Based)
+- **OppW%**: individual opponent win rate
+- **OW%**: average opponent win rate
 """
         )
         st.latex(r"\text{OW\%} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{OppW\%}_i")
-        st.markdown("- **OOW%**: opponents’ opponents winning percentage")
+        st.markdown("- **OOW%**: average win rate of opponents' opponents")
         st.latex(r"\text{OOW\%} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{OW\%}_i")
-        st.markdown("- **SoS (Win%)**: weighted opponent difficulty")
+        st.markdown("- **SoS (Win%)**: composite win-rate based difficulty")
         st.latex(r"\text{SoS}_{\text{Win}} = \frac{2 \cdot \text{OW\%} + \text{OOW\%}}{3}")
 
         st.markdown("---")
         st.markdown(
             """
-### Strength of Schedule (SoS) helpers — Net Rating based
-- **OppNetRtg**: average Net Rating of opponents  
+### SOS Metrics (NetRtg Based)
+- **OppNetRtg**: average opponent efficiency
 """
         )
         st.latex(r"\text{OppNetRtg} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{NetRtg}_i")
-        st.markdown("- **OONetRtg**: opponents’ opponents Net Rating")
+        st.markdown("- **OONetRtg**: average efficiency of opponents' opponents")
         st.latex(r"\text{OONetRtg} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{OppNetRtg}_i")
-        st.markdown("- **SoS (NetRtg)**: efficiency-based schedule difficulty")
+        st.markdown("- **SoS (NetRtg)**: composite efficiency-based difficulty")
         st.latex(r"\text{SoS}_{\text{Net}} = \frac{2 \cdot \text{OppNetRtg} + \text{OONetRtg}}{3}")
 
-    # ---- Run locally only on Info tab ----
+    # Local development info
     with st.expander("Run locally", expanded=False):
         st.markdown(
             """
-- Ensure the schedule CSV exists:
+- Required files:
   - `EL_2025_26_EL_RS_Schedule.csv`
-- Ensure the logos folder exists:
-  - `team_logos/`
-- Start the app:
+  - `team_logos/` directory
+- Launch command:
   - `streamlit run app.py`
 """
         )
 
 
-# =========================================================
-# TAB 1 – Next N Games SoS (build_nextN_altair_logos_table)
-# =========================================================
+# --- Tab 1: Next-N SOS Forecast ---
 elif selected_tab == "Next-N Games SoS":
     try:
-        with st.spinner(f"Computing Next-{int(n_next)} games SoS…"):
+        with st.spinner(f"Forecasting next {int(n_next)} games SOS..."):
             team_ratings, sos_net, sos_win = compute_for_round(current_round)
             sos_nextN_df = load_nextN_sos(
                 current_round=int(current_round),
@@ -613,20 +577,18 @@ elif selected_tab == "Next-N Games SoS":
 
 
     except FileNotFoundError:
-        st.error(f"Schedule file not found: {schedule_path}")
+        st.error(f"Schedule file missing: {schedule_path}")
         st.stop()
     except Exception as e:
-        st.error(f"Error computing next-N SoS: {e}")
+        st.error(f"Computation error: {e}")
         st.stop()
 
 
 
-# =========================================================
-# TAB 2 – SoS(NetRtg) vs NetRtg scatter + side table
-# =========================================================
+# --- Tab 2: Performance vs Difficulty Scatter ---
 elif selected_tab == "SoS vs Team NetRtg Scatter":
     
-    with st.spinner("Building scatter + side table…"):
+    with st.spinner("Rendering scatter plot..."):
         team_ratings, sos_net, sos_win = compute_for_round(current_round)
         main_chart, side_table_chart = make_sos_scatter_and_side_table(
         sos_net=sos_net,
@@ -653,11 +615,9 @@ elif selected_tab == "SoS vs Team NetRtg Scatter":
         with col2:
             st.altair_chart(side_table_chart, width="content")
 
-# =========================================================
-# TAB 3 – Season SoS table (make_sos_table_chart)
-# =========================================================
+# --- Tab 3: Season Metrics Comparison ---
 elif selected_tab == "NetRtg & Win% Methods Table":
-    with st.spinner("Building SoS table…"):
+    with st.spinner("Generating SOS table..."):
         team_ratings, sos_net, sos_win = compute_for_round(current_round)
         sos_table_chart = make_sos_table_chart(
         sos_net=sos_net,

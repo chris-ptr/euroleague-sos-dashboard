@@ -24,13 +24,12 @@ def build_nextN_altair_logos_table(
     mobile_mode: bool = False,
 ) -> alt.Chart:
     """
-    Build a table-like Altair chart for the next N games.
-
-    IMPORTANT:
-    - Use a unique y-key for sorting/aligning (TEAM_KEY)
-    - Use a separate display label for text (TEAM_LABEL)
+    Build an Altair heat-map table for upcoming schedule difficulty.
+    
+    Displays team logos, forecasting SOS, and the next N opponents.
     """
 
+    # Global chart styling
     ROW_FONT = "Roboto"
     TITLE_FONT = "Arial"
     FONT_SIZE = font_size
@@ -43,12 +42,12 @@ def build_nextN_altair_logos_table(
     LOGO_SIZE_MAIN = logo_size_main
     LOGO_SIZE_OPP = logo_size_opp
 
-    # ---------- 1) Map team -> NetRtg (for opponent strength) ----------
+    # Map team names to NetRtg for opponent color-coding
     ratings = team_ratings.copy()
     ratings["TEAM_NAME"] = ratings["TEAM_NAME"].apply(normalize_team_name)
     net_map = dict(zip(ratings["TEAM_NAME"], ratings["NetRtg"]))
 
-    # ---------- 2) Wide -> long for the N opponents ----------
+    # Unpivot N opponents into long format for Altair
     long_rows = []
     for _, row in nextN_df.iterrows():
         team_display = row["Team"]
@@ -76,11 +75,8 @@ def build_nextN_altair_logos_table(
 
             long_rows.append(
                 {
-                    # unique + stable key for y-align (normalized full name)
                     "TEAM_KEY": team_norm,
-                    # label to display (abbr when mobile_mode True)
                     "TEAM_LABEL": team_display_name(team_norm, mobile_mode),
-                    # keep full display too for tooltip
                     "TEAM_DISPLAY_FULL": team_display,
 
                     "Team_Logo_DataURL": team_logo_dataurl,
@@ -97,20 +93,21 @@ def build_nextN_altair_logos_table(
     if alt_df.empty:
         raise ValueError("No opponent data found in nextN_df for Altair chart.")
 
-    # ---------- 3) One row per team for left + SoS ----------
+    # Unique team records for the left sidebar layers
     teams_df = (
         alt_df[["TEAM_KEY", "TEAM_LABEL", "TEAM_DISPLAY_FULL", "Team_Logo_DataURL", "SoS_Net_nextN"]]
         .drop_duplicates(subset=["TEAM_KEY"])
         .reset_index(drop=True)
     )
 
+    # Sort teams by schedule difficulty
     team_order = (
         teams_df.sort_values("SoS_Net_nextN", ascending=False)["TEAM_KEY"].tolist()
     )
 
     teams_df["SoS_Col"] = ""
 
-    # ---------- 4) Left column: logo + team label ----------
+    # Column 1: Team logos and names
     logo_mark = (
         alt.Chart(teams_df)
         .mark_image(width=LOGO_SIZE_MAIN, height=LOGO_SIZE_MAIN)
@@ -140,7 +137,7 @@ def build_nextN_altair_logos_table(
 
     left_col = logo_mark + team_text
 
-    # ---------- 5) SoS column ----------
+    # Column 2: Forecasting SOS (NetRtg)
     sos_color = alt.Color(
         "SoS_Net_nextN:Q",
         title="SoS (NetRtg)",
@@ -175,7 +172,7 @@ def build_nextN_altair_logos_table(
 
     sos_col = sos_rect + sos_text
 
-    # ---------- 6) Next-N games block ----------
+    # Column 3: Upcoming opponent grid
     opp_color = alt.Color(
         "Opp_NetRtg:Q",
         title="Opp NetRtg",
@@ -213,7 +210,7 @@ def build_nextN_altair_logos_table(
 
     games_block = games_rect + games_logos
 
-    # ---------- 7) Final layout + title + fonts ----------
+    # Combine columns into final dashboard layout
     title_txt = (
         f"Strength of Schedule based on NetRtg "
         f"from Round {round_ref - 1} for the next {n_next} games"
@@ -274,20 +271,15 @@ def make_sos_table_chart(
     title_font_size: int = 18,
     mobile_mode: bool = False,
 ) -> alt.Chart:
-    """
-    Build the SoS table (logos + SoS_Net bar + SoS_win bar) as an Altair chart.
+    """Build a comparison table for NetRtg and Win% based SOS metrics."""
 
-    sos_net: must have ['TEAM_NAME', 'SoS_Net']
-    sos_win: must have ['TEAM_NAME', 'SoS'] (SoS = Win% SoS)
-    """
-
-    # ---------- fonts to match Next-N chart ----------
+    # Typography settings
     ROW_FONT = "Roboto"
     TITLE_FONT = "Arial"
     FONT_SIZE = font_size
     TITLE_FONT_SIZE = title_font_size
 
-    # ---------- dynamic title ----------
+    # Compose chart title
     if title is None:
         if season_label is not None and round_ref is not None:
             title = (
@@ -302,7 +294,7 @@ def make_sos_table_chart(
         else:
             title = "EuroLeague Strength of Schedule\n(Net Rating vs Win% Methods)"
 
-    # --- build combined dataframe ---
+    # Merge SOS datasets
     df_net = sos_net[["TEAM_NAME", "SoS_Net"]].copy()
     df_win = sos_win[["TEAM_NAME", "SoS"]].copy().rename(columns={"SoS": "SoS_win"})
 
@@ -312,17 +304,12 @@ def make_sos_table_chart(
     combined["logo_path"] = combined["TEAM_NAME"].apply(team_to_logo_path)
     combined["logo_url"] = combined["logo_path"].apply(logo_to_dataurl)
 
-    # =========================================================
-    # IMPORTANT FIX:
-    # - Use TEAM_KEY (unique) for ALL y encodings in ALL layers
-    # - Use TEAM_LABEL only for what you display as text
-    # =========================================================
-    combined["TEAM_KEY"] = combined["TEAM_NAME"]  # unique row key
+    combined["TEAM_KEY"] = combined["TEAM_NAME"]
     combined["TEAM_LABEL"] = combined["TEAM_NAME"].apply(
         lambda t: team_display_name(t, mobile_mode)
     )
 
-    # --- normalization ---
+    # Normalize metrics for proportional bar lengths
     min_net = float(combined["SoS_Net"].min())
     max_net = float(combined["SoS_Net"].max())
     range_net = max_net - min_net if max_net != min_net else 1.0
@@ -343,15 +330,10 @@ def make_sos_table_chart(
         lambda v: norm_with_margin(v, min_win, range_win, margin=0.05)
     )
 
-    # Order must be based on the unique key
     team_order = combined["TEAM_KEY"].tolist()
-
-    # common y scale with padding (for spacing between rows)
     y_scale = alt.Scale(paddingInner=padding_inner, paddingOuter=padding_outer)
 
-    # =========================================================
-    # LEFT COLUMN: logo + team label
-    # =========================================================
+    # Sidebar: Logos and Team labels
     logo_col = (
         alt.Chart(combined)
         .mark_image(width=logo_size, height=logo_size)
@@ -375,14 +357,12 @@ def make_sos_table_chart(
     ).encode(
         y=alt.Y("TEAM_KEY:N", sort=team_order, scale=y_scale, axis=None),
         x=alt.value(0),
-        text="TEAM_LABEL:N",  # show abbreviated or full label here
+        text="TEAM_LABEL:N",
     )
 
     left_col = logo_col + name_col
 
-    # =========================================================
-    # MIDDLE COLUMN: SoS (NetRtg)
-    # =========================================================
+    # Bar Chart: SOS (NetRtg)
     net_bar = alt.Chart(combined).mark_bar(
         stroke="black",
         strokeWidth=0.7,
@@ -419,9 +399,7 @@ def make_sos_table_chart(
         title="SoS (NetRtg)",
     )
 
-    # =========================================================
-    # RIGHT COLUMN: SoS (Win%)
-    # =========================================================
+    # Bar Chart: SOS (Win%)
     win_bar = alt.Chart(combined).mark_bar(
         stroke="black",
         strokeWidth=0.7,
@@ -458,9 +436,7 @@ def make_sos_table_chart(
         title="SoS (Win%)",
     )
 
-    # =========================================================
-    # FINAL TABLE
-    # =========================================================
+    # Horizontal concatenation of chart columns
     sos_table_chart = (
         alt.hconcat(left_col, net_col, win_col, spacing = 10)
         .resolve_scale(y="shared")
@@ -496,7 +472,6 @@ def make_sos_table_chart(
     return sos_table_chart
 
 
-# Function to have both tables on the sos scatter
 def make_sos_scatter_and_side_table(
     sos_net: pd.DataFrame,
     team_ratings: pd.DataFrame,
@@ -515,18 +490,16 @@ def make_sos_scatter_and_side_table(
     table_h: int = 560,
 ) -> tuple[alt.Chart, alt.Chart]:
     """
-    Build SoS(NetRtg) vs NetRtg scatter + side table,
-    but return them as two separate charts (main_chart, table_chart)
-    so Streamlit can show them in two columns.
+    Generate the SOS scatter plot and complementary NetRtg side table.
     """
 
-    # ---------- fonts to match Next-N chart ----------
+    # Visual presets
     ROW_FONT = "Roboto"
     TITLE_FONT = "Arial"
     FONT_SIZE = 15
     TITLE_FONT_SIZE = 18
 
-    # ---------- dynamic title ----------
+    # Dynamic title generation
     if title is None:
         if season_label is not None and round_ref is not None:
             title = (
@@ -541,9 +514,7 @@ def make_sos_scatter_and_side_table(
         else:
             title = "EuroLeague: Strength of Schedule (NetRtg) vs Team Net Rating"
 
-    # =========================================================
-    # 0. Combine data + ranking
-    # =========================================================
+    # Join metrics and rank teams by efficiency
     df = sos_net[["TEAM_NAME", "SoS_Net"]].merge(
         team_ratings[["TEAM_NAME", "NetRtg", "OffRtg", "DefRtg"]],
         on="TEAM_NAME",
@@ -553,18 +524,15 @@ def make_sos_scatter_and_side_table(
     df["logo_path"] = df["TEAM_NAME"].apply(team_to_logo_path)
     df["logo_url"] = df["logo_path"].apply(logo_to_dataurl)
 
-    # Rank by NetRtg (1 = best)
     df["Rank"] = df["NetRtg"].rank(ascending=False, method="first").astype(int)
     df["Label"] = ""
     df.loc[df["Rank"] <= 4, "Label"] = "#" + df["Rank"].astype(str)
     df.loc[df["Rank"] > len(df) - 4, "Label"] = "#" + df["Rank"].astype(str)
 
-    # for labels on logos (top-4 + bottom-4)
+    # Top/Bottom teams for overlay labels
     hi_lo_df = df[(df["Rank"] <= 4) | (df["Rank"] > len(df) - 4)].copy()
 
-    # =========================================================
-    # 1. Axis ranges
-    # =========================================================
+    # Calculate axis bounds (centered around zero for SOS)
     x_min_raw = float(df["SoS_Net"].min())
     x_max_raw = float(df["SoS_Net"].max())
 
@@ -572,17 +540,15 @@ def make_sos_scatter_and_side_table(
     if abs_max < 0.25:
         abs_max = 0.25
 
-    # reversed axis → hard schedule on the LEFT
+    # Reverse X-axis: harder schedule (higher SOS) on the left
     x_domain = [abs_max, -abs_max]
 
     y_min = float(df["NetRtg"].min())
     y_max = float(df["NetRtg"].max())
 
-    # =========================================================
-    # 2. Quadrant labels
-    # =========================================================
-    x_left = abs_max * 0.65   # tough schedule side
-    x_right = -abs_max * 0.65 # easy schedule side
+    # Annotate quadrants for performance context
+    x_left = abs_max * 0.65   # High SOS zone
+    x_right = -abs_max * 0.65 # Low SOS zone
     y_top = y_max * 0.65
     y_bottom = y_min * 0.65
 
@@ -613,9 +579,7 @@ def make_sos_scatter_and_side_table(
         ),
     )
 
-    # =========================================================
-    # 3. Scatter + logos + #labels  (MAIN CHART)
-    # =========================================================
+    # Base scatter plot layer
     base = alt.Chart(df).encode(
         x=alt.X(
             "SoS_Net:Q",
@@ -629,7 +593,7 @@ def make_sos_scatter_and_side_table(
         ),
     )
 
-    # thick 0-lines
+    # Baseline reference lines
     rule_y0 = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(
         stroke="black", strokeWidth=1.5, opacity=0.9
     ).encode(y="y:Q")
@@ -638,7 +602,7 @@ def make_sos_scatter_and_side_table(
         stroke="black", strokeWidth=1.5, opacity=0.9
     ).encode(x="x:Q")
 
-    # logos
+    # Team logos as markers
     logo_layer = base.mark_image(width=40, height=40).encode(
         url="logo_url:N",
         tooltip=[
@@ -649,7 +613,7 @@ def make_sos_scatter_and_side_table(
         ],
     )
 
-    # Rank labels above logos (only top 4 + bottom 4)
+    # NetRtg rank labels
     label_layer = alt.Chart(hi_lo_df).encode(
         x=alt.X("SoS_Net:Q", scale=alt.Scale(domain=x_domain, nice=False, zero=False)),
         y=alt.Y("NetRtg:Q", scale=alt.Scale(domain=[y_min, y_max], nice=True, zero=False)),
@@ -680,32 +644,14 @@ def make_sos_scatter_and_side_table(
     ).configure_axis(
         labelFont=ROW_FONT,
         titleFont=ROW_FONT,
-        labelFontSize=FONT_SIZE,
-        titleFontSize=FONT_SIZE,
         grid=True,
         gridColor="#d3d3d3",
         gridWidth=0.4,
-        domainColor="#555",
-        tickColor="#555",
         labelColor="black",
         titleColor="black",
-        titlePadding=12,
-    ).configure_title(
-        font=TITLE_FONT,
-        fontSize=TITLE_FONT_SIZE,
-    ).configure_text(
-        font=ROW_FONT,
-        fontSize=FONT_SIZE,
-    ).configure_legend(
-        labelFont=ROW_FONT,
-        titleFont=ROW_FONT,
-        labelFontSize=FONT_SIZE,
-        titleFontSize=FONT_SIZE,
     )
 
-    # =========================================================
-    # 4. SIDE TABLE (Top K & Bottom K) – with logos
-    # =========================================================
+    # Side Table: Top/Bottom performers
     top_df = df.nsmallest(top_k, "Rank").copy().sort_values("Rank")
     bottom_df = df.nlargest(bottom_k, "Rank").copy().sort_values("Rank")
 
@@ -713,10 +659,9 @@ def make_sos_scatter_and_side_table(
     bottom_df["group"] = "Bottom NetRtg"
 
     stats_df = pd.concat([top_df, bottom_df], ignore_index=True)
-
-    # order for vertical layout
     stats_df["order"] = range(len(stats_df))
 
+    # Multi-line summary strings
     stats_df["row_text"] = stats_df.apply(
         lambda r: (
             f"#{r['Rank']}  {r['TEAM_NAME']}\n"
@@ -725,14 +670,12 @@ def make_sos_scatter_and_side_table(
         axis=1,
     )
 
-    # logo column
     logo_col = alt.Chart(stats_df).mark_image(width=32, height=32).encode(
         y=alt.Y("order:O", axis=None),
         x=alt.value(20),
         url="logo_url:N",
     )
 
-    # text column
     text_col = alt.Chart(stats_df).mark_text(
         align="left",
         fontSize=11,
@@ -744,8 +687,8 @@ def make_sos_scatter_and_side_table(
         text="row_text:N",
         color=alt.condition(
             alt.datum.group == "Top NetRtg",
-            alt.value("#2c742cb8"),   # color for top rows
-            alt.value("#81290e"),     # color for bottom rows
+            alt.value("#2c742cb8"),
+            alt.value("#81290e"),
         ),
     )
 
@@ -758,19 +701,6 @@ def make_sos_scatter_and_side_table(
     ).configure_axis(
         labelFont=ROW_FONT,
         titleFont=ROW_FONT,
-        labelFontSize=FONT_SIZE,
-        titleFontSize=FONT_SIZE,
-    ).configure_title(
-        font=TITLE_FONT,
-        fontSize=TITLE_FONT_SIZE,
-    ).configure_text(
-        font=ROW_FONT,
-        fontSize=FONT_SIZE,
-    ).configure_legend(
-        labelFont=ROW_FONT,
-        titleFont=ROW_FONT,
-        labelFontSize=FONT_SIZE,
-        titleFontSize=FONT_SIZE,
     ).configure_view(
         stroke="black",
         strokeWidth=1.0,

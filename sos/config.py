@@ -1,15 +1,13 @@
 from pathlib import Path
 
-# EuroLeague season start year (2025–26)
+# Competition metadata
 DEFAULT_SEASON = 2025
-DEFAULT_COMPETITION = "E"  # "E" = EuroLeague
+DEFAULT_COMPETITION = "E"
 
-# Schedule CSV
+# Input datasets
 SCHEDULE_FILENAME = "EL_2025_26_EL_RS_Schedule.csv"
-
-# Logos directory
 TEAM_LOGO_DIR = Path("team_logos")
 
-# UI defaults
+# Global UI defaults
 DEFAULT_CURRENT_ROUND = 31
 DEFAULT_N_NEXT = 5

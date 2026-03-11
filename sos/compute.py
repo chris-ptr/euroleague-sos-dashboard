@@ -17,13 +17,9 @@ def compute_team_net_rating(
     team_stats_api: TeamStats,
 ) -> dict:
     """
-    Compute season-to-date OffRtg, DefRtg, NetRtg for a single team,
-    using a single possession count per team.
-
-    Uses:
-      - games_meta (hometeam/awayteam/homescore/awayscore/gameCode)
-      - team_stats_api.get_team_advanced_stats_single_game(season, gamecode)
-        where df_adv: row 0 = home, row 1 = away, col 3 = team possessions.
+    Calculate season-to-date efficiency metrics (OffRtg, DefRtg, NetRtg) for a team.
+    
+    Aggregates points and possessions across all games played so far.
     """
     df = games_meta.copy()
     df = df[
@@ -62,6 +58,7 @@ def compute_team_net_rating(
             pts_for = float(row["awayscore"])
             pts_against = float(row["homescore"])
 
+        # Fetch possessions from API response
         poss = float(adv.iloc[idx, 3])
         if poss <= 0 or np.isnan(poss):
             continue
@@ -86,6 +83,7 @@ def compute_team_net_rating(
             }
         )
 
+    # Aggregate season totals
     if total_poss > 0:
         season_offrtg = total_pts_for / total_poss * 100.0
         season_defrtg = total_pts_against / total_poss * 100.0
@@ -118,10 +116,7 @@ def compute_team_ratings_up_to_round(
     round_max: int,
     round_col: str = "Round",
 ) -> pd.DataFrame:
-    """
-    Compute OffRtg / DefRtg / NetRtg for all teams using games up to and
-    including round_max.
-    """
+    """Compute league-wide efficiency metrics through a specific round."""
     df = games_meta.copy()
     if round_col in df.columns:
         df = df[df[round_col] <= round_max].copy()
@@ -148,12 +143,7 @@ def compute_team_ratings_up_to_round(
 
 
 def compute_team_win_pct(games_meta: pd.DataFrame) -> Dict[str, float]:
-    """
-    Compute basic Win% for each team from games_meta.
-
-    games_meta must contain:
-        ['hometeam', 'awayteam', 'homescore', 'awayscore'].
-    """
+    """Calculate winning percentage for all teams from game metadata."""
     df = games_meta.copy()
     df = df[
         df["homescore"].notna() &
@@ -187,9 +177,9 @@ def compute_sos_from_netrtg_up_to_round(
     round_col: str = "Round",
 ) -> pd.DataFrame:
     """
-    Simplified version of your SoS_Net logic:
-
-    SoS_Net(team) = mean(NetRtg of opponents faced up to round_max).
+    Calculate SOS based on opponent Net Rating averages.
+    
+    Hardest schedule = highest positive SoS_Net (facing strongest opponents).
     """
     df = games_meta.copy()
     if round_col in df.columns:
@@ -199,7 +189,7 @@ def compute_sos_from_netrtg_up_to_round(
         df["awayscore"].notna()
     ]
 
-    # Long schedule: one row per (team, opponent, game)
+    # Reshape schedule to long format (one row per team per game)
     home_side = df[["gameCode", "hometeam", "awayteam"]].rename(
         columns={"hometeam": "TEAM_NAME", "awayteam": "OPP_NAME"}
     )
@@ -210,6 +200,7 @@ def compute_sos_from_netrtg_up_to_round(
 
     net_map = dict(zip(team_ratings["TEAM_NAME"], team_ratings["NetRtg"]))
 
+    # Map opponent ratings to the schedule
     schedule_long["OppNetRtg"] = schedule_long["OPP_NAME"].map(net_map)
 
     sos = (
@@ -230,30 +221,21 @@ def compute_sos_from_winpct_up_to_round(
     round_max: int,
     round_col: str = "Round",
 ) -> pd.DataFrame:
-    """
-    SoS from Win%:
-
-    SoS(team) = mean(Win% of opponents faced up to round_max).
-
-    Returns:
-        DataFrame with columns:
-            - TEAM_NAME
-            - SoS   (opponents' average win%)
-    """
+    """Calculate SOS based on opponent winning percentage averages."""
     df = games_meta.copy()
     if round_col in df.columns:
         df = df[df[round_col] <= round_max].copy()
 
-    # keep only games with scores
+    # Filter for completed games
     df = df[
         df["homescore"].notna() &
         df["awayscore"].notna()
     ].reset_index(drop=True)
 
-    # 1) compute win% per team (using your helper)
-    win_pct = compute_team_win_pct(df)   # dict: TEAM_NAME -> win%
+    # Get current Win% for all teams
+    win_pct = compute_team_win_pct(df)
 
-    # 2) create long schedule: one row per (team, opponent, game)
+    # Flatten schedule
     home_side = df[["gameCode", "hometeam", "awayteam"]].rename(
         columns={"hometeam": "TEAM_NAME", "awayteam": "OPP_NAME"}
     )
@@ -262,18 +244,16 @@ def compute_sos_from_winpct_up_to_round(
     )
     schedule_long = pd.concat([home_side, away_side], ignore_index=True)
 
-    # 3) map opponent win% and average per TEAM_NAME
+    # Aggregate opponent win rates
     schedule_long["OppWinPct"] = schedule_long["OPP_NAME"].map(win_pct)
 
     sos = (
         schedule_long.groupby("TEAM_NAME", as_index=False)["OppWinPct"]
         .mean()
-        .rename(columns={"OppWinPct": "SoS"})   # <-- name is exactly "SoS"
+        .rename(columns={"OppWinPct": "SoS"})
     )
 
-    # sort (hardest schedule = highest SoS)
-    sos = sos.sort_values("SoS", ascending=False).reset_index(drop=True)
-    return sos
+    return sos.sort_values("SoS", ascending=False).reset_index(drop=True)
 
 
 
@@ -282,15 +262,7 @@ def build_next_n_games_per_team(
     current_round: int,
     n_next: int = 5,
 ) -> Dict[str, pd.DataFrame]:
-    """
-    For each team, get the next `n_next` games starting from `current_round`
-    (inclusive), sorted by Round then DateTime.
-
-    Returns
-    -------
-    dict(team_name -> DataFrame)
-        Each DataFrame has columns: ["Round", "DateTime", "Is_Home", "Opponent"]
-    """
+    """Extract upcoming N games for each team from the schedule."""
     df = games.copy()
     df = df[df["Round"] >= current_round].copy()
     df = df.sort_values(["Round", "DateTime"]).reset_index(drop=True)
@@ -330,11 +302,7 @@ def compute_sos_net_rating_next5(
     team_to_next_games: Dict[str, pd.DataFrame],
     team_ratings: pd.DataFrame,
 ) -> Dict[str, float]:
-    """
-    SoS_Net_nextN(team) = mean(NetRtg of opponents in the next N games).
-
-    `team_ratings` must have columns: ["TEAM_NAME", "NetRtg"].
-    """
+    """Forecast SOS using Net Ratings of upcoming opponents."""
     net_map = dict(zip(team_ratings["TEAM_NAME"], team_ratings["NetRtg"]))
     sos_net_nextN: Dict[str, float] = {}
 
@@ -358,11 +326,7 @@ def compute_sos_winpct_next5(
     team_to_next_games: Dict[str, pd.DataFrame],
     team_win_pct: Dict[str, float],
 ) -> Dict[str, float]:
-    """
-    SoS_Win_nextN(team) = mean(Win% of opponents in the next N games).
-
-    `team_win_pct` maps "TEAM_NAME" -> Win% in [0, 1].
-    """
+    """Forecast SOS using Winning Percentages of upcoming opponents."""
     sos_win_nextN: Dict[str, float] = {}
 
     for team, df_next in team_to_next_games.items():
@@ -388,26 +352,8 @@ def make_nextN_sos_table(
     team_ratings: pd.DataFrame,
     n_next: int = 5,
 ) -> pd.DataFrame:
-    """
-    Compute Strength of Schedule for the next N games per team (no plotting).
-
-    Uses:
-      - normalize_team_name
-      - load_clean_schedule
-      - build_next_n_games_per_team
-      - compute_sos_net_rating_next5
-      - compute_team_win_pct
-      - compute_sos_winpct_next5
-
-    Returns a DataFrame with columns:
-      - Team
-      - SoS_Net_nextN
-      - SoS_Win_nextN
-      - Logo_Path
-      - Opp1 ... OppN
-      - Opponents   (comma-separated string of up to N opponents)
-    """
-    # 1) Normalise names in games_meta and ratings
+    """Generate a combined SOS forecasting table for the next N games."""
+    # Standardize metadata and ratings
     games_meta = games_meta.copy()
     games_meta["hometeam"] = games_meta["hometeam"].apply(normalize_team_name)
     games_meta["awayteam"] = games_meta["awayteam"].apply(normalize_team_name)
@@ -415,32 +361,32 @@ def make_nextN_sos_table(
     team_ratings = team_ratings.copy()
     team_ratings["TEAM_NAME"] = team_ratings["TEAM_NAME"].apply(normalize_team_name)
 
-    # 2) Load cleaned schedule
+    # Load cleaned schedule data
     games_sched = load_clean_schedule(schedule_path)
 
-    # 3) Build next N games per team from current_round
+    # Slice upcoming games
     team_to_next_games = build_next_n_games_per_team(
         games=games_sched,
         current_round=current_round,
         n_next=n_next,
     )
 
-    # 4) SoS based on Net Rating (uses next N games)
+    # Forecast efficiency-based SOS
     sos_net_nextN = compute_sos_net_rating_next5(
         team_to_next_games=team_to_next_games,
         team_ratings=team_ratings,
     )
 
-    # 5) Win% per team (full season)
+    # Get baseline win percentages
     team_win_pct = compute_team_win_pct(games_meta)
 
-    # 6) SoS based on Win% (uses next N games)
+    # Forecast win-rate-based SOS
     sos_win_nextN = compute_sos_winpct_next5(
         team_to_next_games=team_to_next_games,
         team_win_pct=team_win_pct,
     )
 
-    # 7) Build final table with up to N opponents in wide form
+    # Build wide-form results table
     rows = []
     for team, next_df in team_to_next_games.items():
         if next_df.empty:
@@ -453,10 +399,8 @@ def make_nextN_sos_table(
                 .tolist()
             )
 
-        # keep at most N opponents
+        # Truncate and pad opponent list
         opps = [o for o in opps if o][:n_next]
-
-        # pad to length N so we always have Opp1..OppN columns
         while len(opps) < n_next:
             opps.append(None)
 
@@ -465,11 +409,11 @@ def make_nextN_sos_table(
             "Team": team,
             "SoS_Net_nextN": sos_net_nextN.get(team, float("nan")),
             "SoS_Win_nextN": sos_win_nextN.get(team, float("nan")),
-            "Logo_Path": team_to_logo_path(team),  # string or None
+            "Logo_Path": team_to_logo_path(team),
             "Opponents": ", ".join([o for o in opps if o]),
         }
 
-        # Opp1..OppN columns
+        # Dynamically add Opp1..OppN columns
         for idx in range(1, n_next + 1):
             row[f"Opp{idx}"] = opps[idx - 1]
 
@@ -477,7 +421,7 @@ def make_nextN_sos_table(
 
     sos_nextN_df = pd.DataFrame(rows)
 
-    # sort by toughest schedule (highest SoS_Net_nextN) at the top
+    # Primary sort by efficiency-based difficulty
     sos_nextN_df = sos_nextN_df.sort_values(
         "SoS_Net_nextN", ascending=False
     ).reset_index(drop=True)
