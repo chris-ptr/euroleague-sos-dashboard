@@ -462,12 +462,13 @@ def make_sos_table_chart(
     # FINAL TABLE
     # =========================================================
     sos_table_chart = (
-        alt.hconcat(left_col, net_col, win_col)
+        alt.hconcat(left_col, net_col, win_col, spacing = 10)
         .resolve_scale(y="shared")
         .properties(
             title=title,
             background="#a3a1a1",
             padding={"left": 20, "right": 20, "top": 20, "bottom": 20},
+            autosize=alt.AutoSizeParams(type="pad", resize=True)
         )
         .configure_axis(
             labelFont=ROW_FONT,

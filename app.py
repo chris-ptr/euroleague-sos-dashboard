@@ -177,8 +177,7 @@ if not mobile_mode:
         font_size=13,
         title_font_size=16,
     )
-    SEASON_STREAMLIT_WIDTH = "stretch"
-
+    SEASON_STREAMLIT_WIDTH = None
 else:
     # Mobile (smaller than tablet)
     NEXTN_KWARGS = dict(
@@ -206,7 +205,7 @@ else:
         font_size=11,
         title_font_size=13,
     )
-    SEASON_STREAMLIT_WIDTH = "content"  # allow scroll
+    SEASON_STREAMLIT_WIDTH = None  # allow scroll
 
 
 # Treat mobile_mode as phone/tablet layout
@@ -670,6 +669,6 @@ elif selected_tab == "NetRtg & Win% Methods Table":
         **SEASON_KWARGS,
         mobile_mode=mobile_mode,
     )
-    st.altair_chart(sos_table_chart, width=SEASON_STREAMLIT_WIDTH)
+    st.altair_chart(sos_table_chart, use_container_width=False, theme=None)
 
 
