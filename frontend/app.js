@@ -1,7 +1,7 @@
 // Fill in your Supabase project URL after creating the project (see setup docs).
 // This is NOT a secret — it's the public base URL for the read-only "sos-public" bucket.
 const CONFIG = {
-  supabaseUrl: "https://YOUR-PROJECT.supabase.co",
+  supabaseUrl: "https://ncvzkxidwkrpygszgsvh.supabase.co",
   publicBucket: "sos-public",
 };
 
