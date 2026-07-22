@@ -6,6 +6,7 @@
   --text-dim: #9aa4bd;
   --accent: #ff7a3d;
   --accent-2: #3d8bff;
+  --sidebar-w: 260px;
   --radius: 10px;
 }
 
@@ -31,99 +32,127 @@ body {
   min-height: 100vh;
 }
 
-header {
-  padding: 28px 24px 18px;
-  text-align: center;
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  align-items: stretch;
 }
 
-header h1 {
-  margin: 0 0 6px;
-  font-size: 1.7rem;
+/* --- Sidebar --- */
+
+.sidebar {
+  width: var(--sidebar-w);
+  flex: 0 0 var(--sidebar-w);
+  background: var(--panel);
+  border-right: 1px solid var(--panel-border);
+  padding: 24px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.brand h1 {
+  margin: 0 0 2px;
+  font-size: 1.25rem;
   letter-spacing: -0.01em;
 }
 
-header p {
+.brand-sub {
   margin: 0;
   color: var(--text-dim);
-  font-size: 0.95rem;
+  font-size: 0.85rem;
 }
 
-nav {
+.sidebar nav {
   display: flex;
-  justify-content: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 0 16px 16px;
+  flex-direction: column;
+  gap: 6px;
 }
 
-nav button {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
+.nav-btn {
+  background: transparent;
+  border: 1px solid transparent;
   color: var(--text-dim);
-  padding: 9px 18px;
-  border-radius: 999px;
-  font-size: 0.9rem;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.92rem;
+  text-align: left;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
 
-nav button:hover {
+.nav-btn:hover {
   color: var(--text);
+  border-color: var(--panel-border);
 }
 
-nav button.active {
+.nav-btn.active {
   color: var(--bg);
   background: var(--accent);
-  border-color: var(--accent);
   font-weight: 600;
 }
 
 .controls {
   display: flex;
-  justify-content: center;
-  align-items: center;
+  flex-direction: column;
   gap: 18px;
-  flex-wrap: wrap;
-  padding: 0 16px 20px;
-  color: var(--text-dim);
-  font-size: 0.9rem;
+  padding-top: 8px;
+  border-top: 1px solid var(--panel-border);
 }
 
-.controls label {
+.control {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 6px;
 }
 
-.controls select {
-  background: var(--panel);
-  color: var(--text);
-  border: 1px solid var(--panel-border);
-  border-radius: 6px;
-  padding: 5px 8px;
-  font-size: 0.9rem;
+.control label {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  display: flex;
+  justify-content: space-between;
 }
 
-.controls .toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  user-select: none;
+.control label span {
+  color: var(--accent);
+  font-weight: 600;
 }
+
+.control input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+
+/* --- Main content --- */
 
 main {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 0 16px 60px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 28px 24px 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .view {
   display: none;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
 }
 
 .view.active {
-  display: block;
+  display: flex;
 }
 
 .panel {
@@ -131,18 +160,33 @@ main {
   border: 1px solid var(--panel-border);
   border-radius: var(--radius);
   padding: 18px;
-  overflow-x: auto;
+  display: inline-block;
+  max-width: 100%;
+}
+
+#view-info .panel {
+  display: block;
+  width: 100%;
+  max-width: 760px;
+}
+
+.chart-container {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .chart-row {
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
+  justify-content: center;
   align-items: flex-start;
+  width: 100%;
 }
 
 .chart-row .panel {
-  flex: 1 1 320px;
+  flex: 0 0 auto;
 }
 
 .status {
@@ -151,6 +195,8 @@ main {
   padding: 40px 0;
   font-size: 0.95rem;
 }
+
+/* --- Info tab --- */
 
 .info h2 {
   font-size: 1.2rem;
@@ -161,12 +207,17 @@ main {
   margin-top: 0;
 }
 
+.info h3 {
+  font-size: 1.02rem;
+  margin: 1.4em 0 0.4em;
+  color: var(--text-dim);
+}
+
 .info .formula {
   background: var(--bg);
   border: 1px solid var(--panel-border);
   border-radius: 8px;
   padding: 10px 14px;
-  font-family: "Roboto Mono", ui-monospace, monospace;
   margin: 10px 0;
   overflow-x: auto;
 }
@@ -181,18 +232,59 @@ main {
   line-height: 1.6;
 }
 
-footer {
-  text-align: center;
-  color: var(--text-dim);
-  font-size: 0.8rem;
-  padding: 20px 0 40px;
+.info details.glossary {
+  margin-top: 1.6em;
+  border-top: 1px solid var(--panel-border);
+  padding-top: 1em;
 }
 
-@media (max-width: 640px) {
-  header h1 {
-    font-size: 1.35rem;
+.info details.glossary summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+/* --- Responsive: sidebar becomes a top bar --- */
+
+@media (max-width: 860px) {
+  .app-shell {
+    flex-direction: column;
   }
-  .panel {
-    padding: 12px;
+
+  .sidebar {
+    position: static;
+    height: auto;
+    width: 100%;
+    flex: 0 0 auto;
+    border-right: none;
+    border-bottom: 1px solid var(--panel-border);
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .sidebar nav {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 8px;
+  }
+
+  .nav-btn {
+    white-space: nowrap;
+  }
+
+  .controls {
+    flex-direction: row;
+    border-top: none;
+    padding-top: 0;
+    gap: 16px;
+  }
+
+  .control {
+    flex: 1 1 0;
+  }
+
+  main {
+    padding: 18px 14px 40px;
   }
 }

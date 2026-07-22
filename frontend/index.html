@@ -5,114 +5,170 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>EuroLeague Strength of Schedule</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
   <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
   <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
 </head>
 <body>
-  <header>
-    <h1>EuroLeague Strength of Schedule</h1>
-    <p>Net Rating &amp; Win% based schedule difficulty, updated automatically each round</p>
-  </header>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <h1>EuroLeague SoS</h1>
+        <p class="brand-sub">2025-26 Season</p>
+      </div>
 
-  <nav>
-    <button class="nav-btn active" data-view="info">Info / About</button>
-    <button class="nav-btn" data-view="nextn">Next-N Games SoS</button>
-    <button class="nav-btn" data-view="scatter">SoS vs Team NetRtg</button>
-    <button class="nav-btn" data-view="season">NetRtg &amp; Win% Table</button>
-  </nav>
+      <nav>
+        <button class="nav-btn active" data-view="info">Info / About</button>
+        <button class="nav-btn" data-view="nextn">Next-N Games SoS</button>
+        <button class="nav-btn" data-view="scatter">SoS vs Team NetRtg</button>
+        <button class="nav-btn" data-view="season">NetRtg &amp; Win% Table</button>
+      </nav>
 
-  <div class="controls">
-    <label>
-      Round
-      <select id="round-select"></select>
-    </label>
-    <label id="n-next-control">
-      Next N games
-      <select id="n-select">
-        <option>1</option><option>2</option><option>3</option><option>4</option>
-        <option selected>5</option><option>6</option><option>7</option><option>8</option>
-        <option>9</option><option>10</option>
-      </select>
-    </label>
-    <label class="toggle">
-      <input type="checkbox" id="mobile-toggle" />
-      Mobile layout
-    </label>
+      <div class="controls">
+        <div class="control">
+          <label for="round-slider">Round <span id="round-value">–</span></label>
+          <input type="range" id="round-slider" min="1" max="38" value="38" />
+        </div>
+        <div class="control" id="n-next-control">
+          <label for="n-slider">Next N games <span id="n-value">5</span></label>
+          <input type="range" id="n-slider" min="1" max="10" value="5" />
+        </div>
+      </div>
+
+      <div class="sidebar-footer" id="last-updated"></div>
+    </aside>
+
+    <main>
+      <section id="view-info" class="view active">
+        <div class="panel info">
+          <h2>Project overview</h2>
+          <p>
+            This dashboard analyzes <strong>Strength of Schedule (SoS)</strong> in the EuroLeague by combining
+            team performance metrics (Net Rating, Win%), the official EuroLeague schedule, and upcoming opponent
+            difficulty. The objective is to contextualize team performance by answering: how difficult has a
+            team's schedule been, and how difficult will it be going forward?
+          </p>
+
+          <h2>Data sources</h2>
+          <p>
+            <strong>Schedule (parsed PDF)</strong> — the Regular Season schedule was parsed from official
+            EuroLeague documents into <code>EL_2025_26_EL_RS_Schedule.csv</code>, used for forecasting future
+            opponent difficulty.
+          </p>
+          <p>
+            <strong>Team stats (euroleague_api)</strong> — historical performance data fetched via the
+            open-source wrapper
+            <a href="https://github.com/giasemidis/euroleague_api" target="_blank" rel="noopener">euroleague_api</a>,
+            powering possession-based efficiency metrics and historical SoS calculations.
+          </p>
+
+          <h2>Core metrics</h2>
+          <p>Measures points differential per 100 possessions:</p>
+          <div class="formula">\[\text{NetRtg} = \text{OffRtg} - \text{DefRtg}\]</div>
+          <p>
+            Where <strong>OffRtg</strong> = points scored per 100 possessions and <strong>DefRtg</strong> = points
+            allowed per 100 possessions. Higher NetRtg ⇒ stronger team, lower NetRtg ⇒ weaker team.
+          </p>
+
+          <h2>Strength of Schedule (formulas)</h2>
+          <p>Adapted from the <strong>Hack-a-Stat</strong> methodology and applied to EuroLeague datasets.</p>
+          <p>
+            <strong>OppW%</strong>: opponent winning percentage &nbsp;·&nbsp;
+            <strong>TmGP</strong>: team games played &nbsp;·&nbsp;
+            <strong>OppNetRtg</strong>: opponent net rating
+          </p>
+
+          <h3>Opponents' Winning Percentage (OW%)</h3>
+          <div class="formula">\[\text{OW\%} = \frac{\sum_{i=1}^{n} \text{OppW\%}_i}{\text{TmGP}}\]</div>
+
+          <h3>Opponents' Opponents' Winning Percentage (OOW%)</h3>
+          <div class="formula">\[\text{OOW\%} = \frac{\sum_{i=1}^{n} \text{OW\%}_i}{\text{TmGP}}\]</div>
+
+          <h3>Strength of Schedule — Win% based</h3>
+          <div class="formula">\[\text{SoS}_{\text{Win}} = \frac{2 \cdot \text{OW\%} + \text{OOW\%}}{3}\]</div>
+          <p>This formula weights direct opponent strength more heavily while reducing noise via secondary opponent metrics.</p>
+
+          <h3>Opponents' Net Rating (OppNetRtg)</h3>
+          <div class="formula">\[\text{OppNetRtg} = \frac{\sum_{i=1}^{n} \text{NetRtg}_i}{\text{TmGP}}\]</div>
+
+          <h3>Opponents' Opponents' Net Rating (OONetRtg)</h3>
+          <div class="formula">\[\text{OONetRtg} = \frac{\sum_{i=1}^{n} \text{OppNetRtg}_i}{\text{TmGP}}\]</div>
+
+          <h3>Strength of Schedule — Net Rating based</h3>
+          <div class="formula">\[\text{SoS}_{\text{Net}} = \frac{2 \cdot \text{OppNetRtg} + \text{OONetRtg}}{3}\]</div>
+          <p>Efficiency-based SoS is less sensitive to close-game variance and remains more stable early in the season.</p>
+
+          <h2>How to read the tabs</h2>
+          <ul>
+            <li><strong>Next-N Games SoS</strong> — forecasts upcoming schedule difficulty using the next N scheduled opponents; color-coded cells represent opponent strength (NetRtg).</li>
+            <li><strong>SoS vs Team NetRtg</strong> — contextualizes team performance against schedule difficulty; quadrants highlight overachievers, underachievers, and schedule outliers.</li>
+            <li><strong>NetRtg &amp; Win% Table</strong> — compares the NetRtg-based and Win%-based SoS estimates side by side for every team.</li>
+          </ul>
+
+          <details class="glossary">
+            <summary>Glossary</summary>
+            <h3>Team efficiency metrics</h3>
+            <ul>
+              <li><strong>OffRtg</strong>: points scored per 100 possessions</li>
+              <li><strong>DefRtg</strong>: points allowed per 100 possessions</li>
+            </ul>
+            <div class="formula">\[\text{OffRtg} = \frac{\text{Points Scored}}{\text{Possessions}} \times 100\]</div>
+            <div class="formula">\[\text{DefRtg} = \frac{\text{Points Allowed}}{\text{Possessions}} \times 100\]</div>
+            <p><strong>NetRtg</strong>: efficiency differential per 100 possessions</p>
+            <div class="formula">\[\text{NetRtg} = \text{OffRtg} - \text{DefRtg}\]</div>
+
+            <h3>SoS metrics (Win% based)</h3>
+            <p><strong>OppW%</strong>: individual opponent win rate &nbsp;·&nbsp; <strong>OW%</strong>: average opponent win rate</p>
+            <div class="formula">\[\text{OW\%} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{OppW\%}_i\]</div>
+            <p><strong>OOW%</strong>: average win rate of opponents' opponents</p>
+            <div class="formula">\[\text{OOW\%} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{OW\%}_i\]</div>
+            <p><strong>SoS (Win%)</strong>: composite win-rate based difficulty</p>
+            <div class="formula">\[\text{SoS}_{\text{Win}} = \frac{2 \cdot \text{OW\%} + \text{OOW\%}}{3}\]</div>
+
+            <h3>SoS metrics (NetRtg based)</h3>
+            <p><strong>OppNetRtg</strong>: average opponent efficiency</p>
+            <div class="formula">\[\text{OppNetRtg} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{NetRtg}_i\]</div>
+            <p><strong>OONetRtg</strong>: average efficiency of opponents' opponents</p>
+            <div class="formula">\[\text{OONetRtg} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{OppNetRtg}_i\]</div>
+            <p><strong>SoS (NetRtg)</strong>: composite efficiency-based difficulty</p>
+            <div class="formula">\[\text{SoS}_{\text{Net}} = \frac{2 \cdot \text{OppNetRtg} + \text{OONetRtg}}{3}\]</div>
+          </details>
+
+          <details class="glossary">
+            <summary>Implementation notes &amp; roadmap</summary>
+            <ul>
+              <li>Visualization layer: Vega-Lite (built with Altair, rendered client-side with vega-embed)</li>
+              <li>Assets: base64-embedded team logos</li>
+              <li>Data pipeline: GitHub Actions computes new rounds on a schedule and publishes precomputed chart data to Supabase Storage; this page fetches it directly — no live backend</li>
+              <li>Current scope: EuroLeague (competition code E), 2025-26 season. Future updates may include EuroCup support and historical seasonal analysis.</li>
+            </ul>
+          </details>
+        </div>
+      </section>
+
+      <section id="view-nextn" class="view">
+        <div class="panel">
+          <div id="chart-nextn" class="chart-container"></div>
+        </div>
+      </section>
+
+      <section id="view-scatter" class="view">
+        <div class="chart-row">
+          <div class="panel"><div id="chart-scatter-main" class="chart-container"></div></div>
+          <div class="panel"><div id="chart-scatter-table" class="chart-container"></div></div>
+        </div>
+      </section>
+
+      <section id="view-season" class="view">
+        <div class="panel">
+          <div id="chart-season" class="chart-container"></div>
+        </div>
+      </section>
+    </main>
   </div>
-
-  <main>
-    <section id="view-info" class="view active">
-      <div class="panel info">
-        <h2>Project overview</h2>
-        <p>
-          This dashboard analyzes <strong>Strength of Schedule (SoS)</strong> in the EuroLeague by combining
-          team performance metrics (Net Rating, Win%), the official EuroLeague schedule, and upcoming opponent
-          difficulty. The goal is to contextualize team performance: how difficult has a team's schedule been,
-          and how difficult will it be going forward?
-        </p>
-
-        <h2>Data sources</h2>
-        <p>
-          <strong>Schedule</strong> — parsed from the official EuroLeague Regular Season PDF into
-          <code>EL_2025_26_EL_RS_Schedule.csv</code>, used for forecasting future opponent difficulty.
-        </p>
-        <p>
-          <strong>Team stats</strong> — fetched via the open-source
-          <a href="https://github.com/giasemidis/euroleague_api" target="_blank" rel="noopener">euroleague_api</a>
-          wrapper, providing OffRtg, DefRtg, NetRtg, standings and results.
-        </p>
-
-        <h2>Core metrics</h2>
-        <div class="formula">NetRtg = OffRtg − DefRtg</div>
-        <p>OffRtg: points scored per 100 possessions. DefRtg: points allowed per 100 possessions. Higher NetRtg ⇒ stronger team.</p>
-
-        <h2>Strength of Schedule — Win% based</h2>
-        <div class="formula">OW% = mean(OppW%) &nbsp;·&nbsp; OOW% = mean(OW% of opponents)</div>
-        <div class="formula">SoS(Win) = (2 · OW% + OOW%) / 3</div>
-        <p>Weights direct opponent strength more heavily while reducing noise via secondary opponent metrics.</p>
-
-        <h2>Strength of Schedule — Net Rating based</h2>
-        <div class="formula">OppNetRtg = mean(NetRtg of opponents) &nbsp;·&nbsp; OONetRtg = mean(OppNetRtg of opponents)</div>
-        <div class="formula">SoS(Net) = (2 · OppNetRtg + OONetRtg) / 3</div>
-        <p>Less sensitive to close-game variance and more stable early in the season than the Win% method.</p>
-
-        <h2>How to read the tabs</h2>
-        <ul>
-          <li><strong>Next-N Games SoS</strong> — forecasts upcoming schedule difficulty using the next N opponents; color-coded by opponent NetRtg.</li>
-          <li><strong>SoS vs Team NetRtg</strong> — contextualizes performance against schedule difficulty; quadrants highlight over/underachievers.</li>
-          <li><strong>NetRtg &amp; Win% Table</strong> — compares the two SoS methods side by side for every team.</li>
-        </ul>
-
-        <h2>How this stays up to date</h2>
-        <p>
-          A scheduled job recomputes and publishes new rounds automatically as EuroLeague games finish —
-          there's no manual update step.
-        </p>
-      </div>
-    </section>
-
-    <section id="view-nextn" class="view">
-      <div class="panel">
-        <div id="chart-nextn"></div>
-      </div>
-    </section>
-
-    <section id="view-scatter" class="view">
-      <div class="chart-row">
-        <div class="panel"><div id="chart-scatter-main"></div></div>
-        <div class="panel"><div id="chart-scatter-table"></div></div>
-      </div>
-    </section>
-
-    <section id="view-season" class="view">
-      <div class="panel">
-        <div id="chart-season"></div>
-      </div>
-    </section>
-  </main>
-
-  <footer>Data via euroleague_api · Updated automatically each round</footer>
 
   <script src="app.js"></script>
 </body>
