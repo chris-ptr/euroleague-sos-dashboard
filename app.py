@@ -2,24 +2,21 @@ import streamlit as st
 import pandas as pd
 import streamlit.components.v1 as components
 import time
-from pathlib import Path
 
 
 from sos.config import (
     DEFAULT_SEASON,
     DEFAULT_COMPETITION,
     SCHEDULE_FILENAME,
-    DEFAULT_CURRENT_ROUND,
+    TOTAL_SEASON_ROUNDS,
     DEFAULT_N_NEXT,
+    CACHE_DIR,
 )
 
 from sos.data import load_games_metadata
-from sos.compute import (
-    compute_team_ratings_up_to_round,
-    compute_sos_from_netrtg_up_to_round,
-    compute_sos_from_winpct_up_to_round,
-    make_nextN_sos_table,
-)
+from sos.rounds import detect_latest_complete_round
+from sos.cache import compute_for_round as _compute_for_round_cached
+from sos.compute import make_nextN_sos_table
 
 from sos.charts import (
     build_nextN_altair_logos_table,
@@ -29,37 +26,9 @@ from sos.charts import (
 
 from sos.utils import team_to_logo_path, logo_to_dataurl
 
-CACHE_DIR = Path("cache/rounds")
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
-
-def _make_parquet_safe(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Remove columns that can't be written to Parquet (nested objects like DataFrames),
-    and convert Path-like objects to strings if needed.
-    """
-    df = df.copy()
-
-    # Drop nested / un-serializable columns
-    bad_cols = []
-    for c in df.columns:
-        # anything "object" can hide dicts/dataframes/etc.
-        if df[c].dtype == "object":
-            # if any cell is a DataFrame/list/dict => drop
-            if df[c].apply(lambda x: isinstance(x, (pd.DataFrame, dict, list, tuple, set))).any():
-                bad_cols.append(c)
-
-    if bad_cols:
-        df = df.drop(columns=bad_cols)
-
-    # Convert Path objects to strings if any slipped in
-    for c in df.columns:
-        if df[c].dtype == "object":
-            if df[c].apply(lambda x: hasattr(x, "__fspath__")).any():
-                df[c] = df[c].astype(str)
-
-    return df
-
-
+# NOTE: app.py is a temporary fallback kept only until the Vercel/Supabase/
+# GitHub Actions pipeline (see frontend/, scripts/, .github/workflows/) is
+# verified end-to-end — see the migration plan for what replaces this.
 
 # Persistent app state
 if "data_ready" not in st.session_state:
@@ -96,6 +65,36 @@ st.title("EuroLeague Strength of Schedule Dashboard")
 # Local schedule file path
 schedule_path = SCHEDULE_FILENAME
 
+# Data loading (fetched before the sidebar so the round selector can be
+# bounded by the actual latest completed round, not a hardcoded number)
+def load_base_data(season: int, competition_code: str):
+    if st.session_state.base_loaded:
+        return (
+            st.session_state.games_meta,
+            st.session_state.team_stats_api,
+        )
+
+    with st.spinner("Fetching API data..."):
+        games_meta, team_stats_api, _metadata_api = load_games_metadata(
+            season=season,
+            competition_code=competition_code,
+        )
+
+    st.session_state.games_meta = games_meta
+    st.session_state.team_stats_api = team_stats_api
+    st.session_state.base_loaded = True
+    return games_meta, team_stats_api
+
+
+games_meta, team_stats_api = load_base_data(
+    season=DEFAULT_SEASON,
+    competition_code=DEFAULT_COMPETITION,
+)
+LATEST_AVAILABLE_ROUND = min(
+    TOTAL_SEASON_ROUNDS,
+    max(1, detect_latest_complete_round(games_meta)),
+)
+
 # Sidebar filters and settings
 with st.sidebar:
 
@@ -123,13 +122,11 @@ with st.sidebar:
         help='Defaults to EuroLeague (E).',
     )
 
-    LATEST_AVAILABLE_ROUND = DEFAULT_CURRENT_ROUND
-
     current_round = st.number_input(
         "Current round",
         min_value=1,
         max_value=int(LATEST_AVAILABLE_ROUND),
-        value=min(int(DEFAULT_CURRENT_ROUND), int(LATEST_AVAILABLE_ROUND)),
+        value=int(LATEST_AVAILABLE_ROUND),
         step=1,
         help="Select the latest round to include in calculations.",
     )
@@ -204,81 +201,15 @@ else:
 
 is_small_screen = mobile_mode
 
-# Data loading and core processing
-def load_base_data(season: int, competition_code: str):
-    if st.session_state.base_loaded:
-        return (
-            st.session_state.games_meta,
-            st.session_state.team_stats_api,
-        )
-
-    with st.spinner("Fetching API data..."):
-        games_meta, team_stats_api, _metadata_api = load_games_metadata(
-            season=season,
-            competition_code=competition_code,
-        )
-
-    st.session_state.games_meta = games_meta
-    st.session_state.team_stats_api = team_stats_api
-    st.session_state.base_loaded = True
-    return games_meta, team_stats_api
-
-
-games_meta, team_stats_api = load_base_data(
-    season=int(season),
-    competition_code=competition_code,
-)
 
 def compute_for_round(round_max: int):
-    round_max = int(round_max)
-    cache_file = CACHE_DIR / f"round_{round_max}.parquet"
-
-    # Try loading from local cache
-    if cache_file.exists():
-        df = pd.read_parquet(cache_file)
-
-        team_ratings = df[df["TYPE"] == "team_ratings"].drop(columns="TYPE")
-        sos_net = df[df["TYPE"] == "sos_net"].drop(columns="TYPE")
-        sos_win = df[df["TYPE"] == "sos_win"].drop(columns="TYPE")
-
-        return team_ratings, sos_net, sos_win
-
-    # Compute metrics from scratch
-    with st.status(f"Calculating Round {round_max} metrics...", expanded=False):
-        team_ratings = compute_team_ratings_up_to_round(
-            games_meta=games_meta,
-            season=int(season),
-            team_stats_api=team_stats_api,
-            round_max=round_max,
-        )
-
-        sos_net = compute_sos_from_netrtg_up_to_round(
-            games_meta=games_meta,
-            team_ratings=team_ratings,
-            round_max=round_max,
-        )
-
-        sos_win = compute_sos_from_winpct_up_to_round(
-            games_meta=games_meta,
-            round_max=round_max,
-        )
-
-    team_ratings_safe = _make_parquet_safe(team_ratings)
-    sos_net_safe = _make_parquet_safe(sos_net)
-    sos_win_safe = _make_parquet_safe(sos_win)
-
-    out = pd.concat(
-        [
-            team_ratings_safe.assign(TYPE="team_ratings"),
-            sos_net_safe.assign(TYPE="sos_net"),
-            sos_win_safe.assign(TYPE="sos_win"),
-        ],
-        ignore_index=True,
+    return _compute_for_round_cached(
+        cache_dir=CACHE_DIR,
+        games_meta=games_meta,
+        season=DEFAULT_SEASON,
+        team_stats_api=team_stats_api,
+        round_max=round_max,
     )
-
-    out.to_parquet(cache_file, index=False)
-
-    return team_ratings, sos_net, sos_win
 
 
 def load_nextN_sos(
@@ -337,7 +268,7 @@ def warm_cache_upto(default_round: int):
 
 
 # Background precomputation
-warm_cache_upto(DEFAULT_CURRENT_ROUND)
+warm_cache_upto(LATEST_AVAILABLE_ROUND)
 
 # --- Tab 0: Project Info ---
 if selected_tab == "Info / About Project":

@@ -6,3 +6,11 @@ __pycache__/
 
 # devcontainer from streamlit
 .devcontainer/
+
+# Local Supabase credentials
+.env
+
+# Local working cache — once seeded to Supabase, this stops being the source of truth.
+# NOTE: do not `git rm --cached` these until scripts/seed_supabase.py has been run
+# successfully against a real Supabase project (see setup instructions).
+cache/rounds/*.parquet

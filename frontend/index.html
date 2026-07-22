@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EuroLeague Strength of Schedule</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+</head>
+<body>
+  <header>
+    <h1>EuroLeague Strength of Schedule</h1>
+    <p>Net Rating &amp; Win% based schedule difficulty, updated automatically each round</p>
+  </header>
+
+  <nav>
+    <button class="nav-btn active" data-view="info">Info / About</button>
+    <button class="nav-btn" data-view="nextn">Next-N Games SoS</button>
+    <button class="nav-btn" data-view="scatter">SoS vs Team NetRtg</button>
+    <button class="nav-btn" data-view="season">NetRtg &amp; Win% Table</button>
+  </nav>
+
+  <div class="controls">
+    <label>
+      Round
+      <select id="round-select"></select>
+    </label>
+    <label id="n-next-control">
+      Next N games
+      <select id="n-select">
+        <option>1</option><option>2</option><option>3</option><option>4</option>
+        <option selected>5</option><option>6</option><option>7</option><option>8</option>
+        <option>9</option><option>10</option>
+      </select>
+    </label>
+    <label class="toggle">
+      <input type="checkbox" id="mobile-toggle" />
+      Mobile layout
+    </label>
+  </div>
+
+  <main>
+    <section id="view-info" class="view active">
+      <div class="panel info">
+        <h2>Project overview</h2>
+        <p>
+          This dashboard analyzes <strong>Strength of Schedule (SoS)</strong> in the EuroLeague by combining
+          team performance metrics (Net Rating, Win%), the official EuroLeague schedule, and upcoming opponent
+          difficulty. The goal is to contextualize team performance: how difficult has a team's schedule been,
+          and how difficult will it be going forward?
+        </p>
+
+        <h2>Data sources</h2>
+        <p>
+          <strong>Schedule</strong> — parsed from the official EuroLeague Regular Season PDF into
+          <code>EL_2025_26_EL_RS_Schedule.csv</code>, used for forecasting future opponent difficulty.
+        </p>
+        <p>
+          <strong>Team stats</strong> — fetched via the open-source
+          <a href="https://github.com/giasemidis/euroleague_api" target="_blank" rel="noopener">euroleague_api</a>
+          wrapper, providing OffRtg, DefRtg, NetRtg, standings and results.
+        </p>
+
+        <h2>Core metrics</h2>
+        <div class="formula">NetRtg = OffRtg − DefRtg</div>
+        <p>OffRtg: points scored per 100 possessions. DefRtg: points allowed per 100 possessions. Higher NetRtg ⇒ stronger team.</p>
+
+        <h2>Strength of Schedule — Win% based</h2>
+        <div class="formula">OW% = mean(OppW%) &nbsp;·&nbsp; OOW% = mean(OW% of opponents)</div>
+        <div class="formula">SoS(Win) = (2 · OW% + OOW%) / 3</div>
+        <p>Weights direct opponent strength more heavily while reducing noise via secondary opponent metrics.</p>
+
+        <h2>Strength of Schedule — Net Rating based</h2>
+        <div class="formula">OppNetRtg = mean(NetRtg of opponents) &nbsp;·&nbsp; OONetRtg = mean(OppNetRtg of opponents)</div>
+        <div class="formula">SoS(Net) = (2 · OppNetRtg + OONetRtg) / 3</div>
+        <p>Less sensitive to close-game variance and more stable early in the season than the Win% method.</p>
+
+        <h2>How to read the tabs</h2>
+        <ul>
+          <li><strong>Next-N Games SoS</strong> — forecasts upcoming schedule difficulty using the next N opponents; color-coded by opponent NetRtg.</li>
+          <li><strong>SoS vs Team NetRtg</strong> — contextualizes performance against schedule difficulty; quadrants highlight over/underachievers.</li>
+          <li><strong>NetRtg &amp; Win% Table</strong> — compares the two SoS methods side by side for every team.</li>
+        </ul>
+
+        <h2>How this stays up to date</h2>
+        <p>
+          A scheduled job recomputes and publishes new rounds automatically as EuroLeague games finish —
+          there's no manual update step.
+        </p>
+      </div>
+    </section>
+
+    <section id="view-nextn" class="view">
+      <div class="panel">
+        <div id="chart-nextn"></div>
+      </div>
+    </section>
+
+    <section id="view-scatter" class="view">
+      <div class="chart-row">
+        <div class="panel"><div id="chart-scatter-main"></div></div>
+        <div class="panel"><div id="chart-scatter-table"></div></div>
+      </div>
+    </section>
+
+    <section id="view-season" class="view">
+      <div class="panel">
+        <div id="chart-season"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>Data via euroleague_api · Updated automatically each round</footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
