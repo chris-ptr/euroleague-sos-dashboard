@@ -1,10 +1,3 @@
-// Fill in your Supabase project URL after creating the project (see setup docs).
-// This is NOT a secret — it's the public base URL for the read-only "sos-public" bucket.
-const CONFIG = {
-  supabaseUrl: "https://ncvzkxidwkrpygszgsvh.supabase.co",
-  publicBucket: "sos-public",
-};
-
 const state = {
   view: "info",
   round: null,
@@ -28,15 +21,12 @@ const els = {
   },
 };
 
-function publicBase() {
-  return `${CONFIG.supabaseUrl}/storage/v1/object/public/${CONFIG.publicBucket}`;
-}
-
 // Per-round chart specs never change once a round is published, so let the
 // browser cache them — otherwise every slider drag re-downloads the same JSON.
 // Only latest.json is refetched, since it's the pointer that does move.
+// Artifacts are served from the same origin as this page (see vercel.json).
 async function fetchJSON(path, { revalidate = false } = {}) {
-  const res = await fetch(`${publicBase()}/${path}`, {
+  const res = await fetch(`data/${path}`, {
     cache: revalidate ? "no-store" : "default",
   });
   if (!res.ok) {
@@ -190,7 +180,7 @@ async function init() {
       els.lastUpdated.textContent = `Updated ${new Date(latest.updated_at).toLocaleDateString()}`;
     }
   } catch (err) {
-    console.error("Failed to load latest.json — has the data been published to Supabase yet?", err);
+    console.error("Failed to load latest.json — has scripts/publish_all.py been run and the output committed?", err);
   }
 }
 

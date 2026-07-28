@@ -6,4 +6,3 @@ Pillow
 euroleague_api
 pyarrow
 requests
-python-dotenv

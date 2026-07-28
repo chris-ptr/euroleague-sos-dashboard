@@ -26,9 +26,10 @@ from sos.charts import (
 
 from sos.utils import team_to_logo_path, logo_to_dataurl
 
-# NOTE: app.py is a temporary fallback kept only until the Vercel/Supabase/
-# GitHub Actions pipeline (see frontend/, scripts/, .github/workflows/) is
-# verified end-to-end — see the migration plan for what replaces this.
+# NOTE: app.py is a temporary fallback kept only until the static Vercel site
+# (see frontend/ and scripts/) is verified end-to-end. It renders the same charts
+# locally from cache/rounds/*.parquet, with logos inlined as base64 rather than
+# fetched by URL.
 
 # Persistent app state
 if "data_ready" not in st.session_state:
@@ -412,7 +413,7 @@ Efficiency-based SOS is less sensitive to close-game variance and remains more s
         """
 ## Implementation notes
 - Visualization layer: **Altair**
-- Assets: Base64 embedded team logos from `team_logos/`
+- Assets: Base64 embedded team logos from `frontend/data/logos/`
 - Data persistence: Parquet-based local caching
 """
     )
@@ -475,7 +476,7 @@ Future updates will include EuroCup support and historical seasonal analysis.
             """
 - Required files:
   - `EL_2025_26_EL_RS_Schedule.csv`
-  - `team_logos/` directory
+  - `frontend/data/logos/` directory
 - Launch command:
   - `streamlit run app.py`
 """

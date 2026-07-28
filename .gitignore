@@ -9,9 +9,8 @@ __pycache__/
 
 SETUP.md
 
-# Local Supabase credentials
 .env
-# Local working cache — once seeded to Supabase, this stops being the source of truth.
-# NOTE: do not `git rm --cached` these until scripts/seed_supabase.py has been run
-# successfully against a real Supabase project (see setup instructions).
-cache/rounds/*.parquet
+
+# NOTE: cache/rounds/*.parquet and frontend/data/ are deliberately tracked —
+# the parquet cache is the record of what has been computed, and the published
+# chart JSON is what Vercel serves. Do not add them here.

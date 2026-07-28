@@ -141,8 +141,8 @@
             <summary>Implementation notes &amp; roadmap</summary>
             <ul>
               <li>Visualization layer: Vega-Lite (built with Altair, rendered client-side with vega-embed)</li>
-              <li>Assets: base64-embedded team logos</li>
-              <li>Data pipeline: GitHub Actions computes new rounds on a schedule and publishes precomputed chart data to Supabase Storage; this page fetches it directly — no live backend</li>
+              <li>Assets: team logos served as static PNGs, referenced by URL from the chart specs</li>
+              <li>Data pipeline: a local script computes new rounds and writes precomputed chart JSON into the site itself; this page fetches it from the same origin — no live backend, no database</li>
               <li>Current scope: EuroLeague (competition code E), 2025-26 season. Future updates may include EuroCup support and historical seasonal analysis.</li>
             </ul>
           </details>

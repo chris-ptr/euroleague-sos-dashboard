@@ -1,13 +1,14 @@
 """
-Build the precomputed Vega-Lite JSON artifacts for a single round, ready to
-be uploaded as-is to the public Supabase Storage bucket. Every chart builder
-call here is the existing, unmodified sos/charts.py logic — only the output
-shape (dict instead of rendered chart) is new. The frontend scales each
+Build the precomputed Vega-Lite JSON artifacts for a single round and write them
+out as static files under PUBLISH_DIR, where Vercel serves them. Every chart
+builder call here is the existing, unmodified sos/charts.py logic — only the
+output shape (dict instead of rendered chart) is new. The frontend scales each
 rendered chart to fit its container, so only one size per chart is needed.
 
-Published specs reference team logos by public URL (sync_team_logos uploads
-them once), never as inline base64 — see sos.utils.logo_to_public_url.
+Published specs reference team logos by site-relative URL, never as inline
+base64 — see sos.utils.logo_to_site_url for why that matters.
 """
+import json
 from pathlib import Path
 from typing import Dict
 
@@ -19,26 +20,16 @@ from .charts import (
     make_sos_scatter_and_side_table,
 )
 from .compute import make_nextN_sos_table
-from .utils import team_to_logo_path, logo_to_public_url, iter_local_logo_files
+from .utils import team_to_logo_path, logo_to_site_url
 from .presets import NEXTN_KWARGS, SCATTER_KWARGS, SEASON_KWARGS, NEXT_N_VALUES
 
 
-def sync_team_logos(storage, bucket: str) -> int:
-    """
-    Upload the team logo PNGs to the public bucket so published chart specs can
-    reference them by URL. Idempotent (upsert), ~20 small files — cheap enough
-    to run on every publish rather than tracking whether it has been done.
-    """
-    count = 0
-    for local_path, storage_key in iter_local_logo_files():
-        storage.upload_bytes(
-            bucket,
-            storage_key,
-            Path(local_path).read_bytes(),
-            content_type="image/png",
-        )
-        count += 1
-    return count
+def write_artifacts(out_dir: Path, artifacts: Dict[str, dict]) -> None:
+    """Write {relative_path: spec} under out_dir, creating parent dirs."""
+    for rel_path, spec in artifacts.items():
+        dest = Path(out_dir) / rel_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(json.dumps(spec), encoding="utf-8")
 
 
 def build_round_artifacts(
@@ -67,7 +58,7 @@ def build_round_artifacts(
             team_to_logo_path_fn=team_to_logo_path,
             round_ref=round_num,
             n_next=n,
-            logo_path_to_url_fn=logo_to_public_url,
+            logo_path_to_url_fn=logo_to_site_url,
             **NEXTN_KWARGS,
         )
         artifacts[f"rounds/{round_num}/next-n/{n}.json"] = chart.to_dict()
@@ -76,7 +67,7 @@ def build_round_artifacts(
         sos_net=sos_net,
         team_ratings=team_ratings,
         team_to_logo_path=team_to_logo_path,
-        logo_path_to_url_fn=logo_to_public_url,
+        logo_path_to_url_fn=logo_to_site_url,
         top_k=5,
         bottom_k=5,
         round_ref=round_num,
@@ -92,7 +83,7 @@ def build_round_artifacts(
         sos_net=sos_net,
         sos_win=sos_win,
         team_to_logo_path=team_to_logo_path,
-        logo_path_to_url_fn=logo_to_public_url,
+        logo_path_to_url_fn=logo_to_site_url,
         round_ref=round_num,
         season_label=season_label,
         **SEASON_KWARGS,
