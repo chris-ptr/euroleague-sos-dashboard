@@ -57,11 +57,11 @@ def _init_state():
 _init_state()
 
 
+st.warning("This project is migrating to Vercel. You can access the new version here: https://euroleague-sos-dashboard.vercel.app/")
+
 # Page setup
 st.set_page_config(page_title="EuroLeague SoS Dashboard", layout="wide")
 st.title("EuroLeague Strength of Schedule Dashboard")
-
-
 
 # Local schedule file path
 schedule_path = SCHEDULE_FILENAME
