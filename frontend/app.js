@@ -7,11 +7,14 @@ const state = {
 
 const els = {
   navButtons: document.querySelectorAll(".nav-btn"),
-  roundSlider: document.getElementById("round-slider"),
+  roundDec: document.getElementById("round-dec"),
+  roundInc: document.getElementById("round-inc"),
   roundValue: document.getElementById("round-value"),
-  nSlider: document.getElementById("n-slider"),
+  nDec: document.getElementById("n-dec"),
+  nInc: document.getElementById("n-inc"),
   nValue: document.getElementById("n-value"),
   nControl: document.getElementById("n-next-control"),
+  controls: document.getElementById("controls"),
   lastUpdated: document.getElementById("last-updated"),
   views: {
     info: document.getElementById("view-info"),
@@ -22,7 +25,7 @@ const els = {
 };
 
 // Per-round chart specs never change once a round is published, so let the
-// browser cache them — otherwise every slider drag re-downloads the same JSON.
+// browser cache them — otherwise stepping back and forth re-downloads the same JSON.
 // Only latest.json is refetched, since it's the pointer that does move.
 // Artifacts are served from the same origin as this page (see vercel.json).
 async function fetchJSON(path, { revalidate = false } = {}) {
@@ -132,26 +135,59 @@ function setView(view) {
   state.view = view;
   els.navButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.view === view));
   Object.entries(els.views).forEach(([name, el]) => el.classList.toggle("active", name === view));
+  // Info / About is static text — neither stepper applies, so drop the whole
+  // controls block rather than leaving an empty container.
+  els.controls.style.display = view === "info" ? "none" : "";
   els.nControl.style.display = view === "nextn" ? "" : "none";
   renderActiveView();
 }
 
-function initSliders(latestRound) {
-  els.roundSlider.min = 1;
-  els.roundSlider.max = latestRound;
-  els.roundSlider.value = latestRound;
-  els.roundValue.textContent = latestRound;
+// --- Steppers -------------------------------------------------------------
+//
+// Round and Next-N move one step at a time rather than by drag: each value is
+// a separate precomputed JSON file, so every intermediate value a slider swept
+// through was a fetch nobody asked to see.
 
-  els.roundSlider.addEventListener("input", () => {
-    state.round = parseInt(els.roundSlider.value, 10);
-    els.roundValue.textContent = state.round;
+function initStepper({ decEl, incEl, valueEl, min, max, get, set }) {
+  const sync = () => {
+    const value = get();
+    valueEl.textContent = value;
+    decEl.disabled = value <= min;
+    incEl.disabled = value >= max;
+  };
+
+  const step = (delta) => {
+    const next = Math.min(max, Math.max(min, get() + delta));
+    if (next === get()) return;
+    set(next);
+    sync();
     renderActiveView();
+  };
+
+  decEl.addEventListener("click", () => step(-1));
+  incEl.addEventListener("click", () => step(1));
+  sync();
+}
+
+function initSteppers(latestRound) {
+  initStepper({
+    decEl: els.roundDec,
+    incEl: els.roundInc,
+    valueEl: els.roundValue,
+    min: 1,
+    max: latestRound,
+    get: () => state.round,
+    set: (v) => { state.round = v; },
   });
 
-  els.nSlider.addEventListener("input", () => {
-    state.nNext = parseInt(els.nSlider.value, 10);
-    els.nValue.textContent = state.nNext;
-    renderActiveView();
+  initStepper({
+    decEl: els.nDec,
+    incEl: els.nInc,
+    valueEl: els.nValue,
+    min: 1,
+    max: 10,
+    get: () => state.nNext,
+    set: (v) => { state.nNext = v; },
   });
 }
 
@@ -175,7 +211,7 @@ async function init() {
     const latest = await fetchJSON("latest.json", { revalidate: true });
     state.latestRound = latest.round;
     state.round = latest.round;
-    initSliders(latest.round);
+    initSteppers(latest.round);
     if (latest.updated_at) {
       els.lastUpdated.textContent = `Updated ${new Date(latest.updated_at).toLocaleDateString()}`;
     }

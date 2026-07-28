@@ -1,35 +1,118 @@
+/* ---------------------------------------------------------------------------
+   Nocturne — dark ground, blurple accent, Geomini.
+   Tokens and component styling follow nocturne.styles.css from the frontend
+   redesign handoff (see README.md). Nocturne is a single-ground system: there
+   is deliberately no prefers-color-scheme: light override.
+   --------------------------------------------------------------------------- */
+
 :root {
-  --bg: #0f1524;
-  --panel: #161d31;
-  --panel-border: #262f47;
-  --text: #e8ebf3;
-  --text-dim: #9aa4bd;
-  --accent: #ff7a3d;
-  --accent-2: #3d8bff;
+  --color-bg: #161826;
+  --color-surface: #232532;
+  --color-text: #e9e9ed;
+  --color-accent: #9184d9;
+  --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
+
+  /* Tonal ramps — generated in OKLCH on one shared lightness scale, so the
+     same step of any role matches the others in visual value. */
+  --color-neutral-100: #f3f5fe;
+  --color-neutral-200: #e4e7f5;
+  --color-neutral-300: #cfd3e5;
+  --color-neutral-400: #b2b6ca;
+  --color-neutral-500: #9397ab;
+  --color-neutral-600: #75798c;
+  --color-neutral-700: #595d6c;
+  --color-neutral-800: #3f424d;
+  --color-neutral-900: #292b31;
+
+  --color-accent-100: #f5f4ff;
+  --color-accent-200: #e7e5fe;
+  --color-accent-300: #d2cefd;
+  --color-accent-400: #b5abfc;
+  --color-accent-500: #968ae0;
+  --color-accent-600: #796cbf;
+  --color-accent-700: #5d5294;
+  --color-accent-800: #423a6a;
+  --color-accent-900: #2b2741;
+
+  /* Geomini (SIL OFL 1.1, via Google Fonts) in place of the handoff's Inter —
+     a compact geometric face with a high x-height, shipped at 400/500/700, so
+     the system's 500 heading weight survives the swap. Its subsets are latin
+     and latin-ext only; the few symbols outside that (⇒ in the info tab) fall
+     back to system-ui. */
+  --font-heading: "Geomini", system-ui, sans-serif;
+  --font-heading-weight: 500;
+  --font-body: "Geomini", system-ui, sans-serif;
+
+  /* 0.70× density scale */
+  --space-1: 2.8px;
+  --space-2: 5.6px;
+  --space-3: 8.4px;
+  --space-4: 11.2px;
+  --space-6: 16.8px;
+  --space-8: 22.4px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+
+  /* Elevation on a dark ground: a hairline edge plus ambient darkness. */
+  --shadow-sm: 0 0 0 1px #3f424d;
+  --shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 0 0 1px #9397ab, 0 16px 40px rgba(0, 0, 0, 0.65);
+
   --sidebar-w: 260px;
-  --radius: 10px;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f4f5f9;
-    --panel: #ffffff;
-    --panel-border: #e1e4ee;
-    --text: #191d2b;
-    --text-dim: #5b6377;
-  }
-}
-
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.55;
+  font-weight: 400;
   min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+  margin: 0 0 var(--space-2);
+}
+
+a {
+  color: var(--color-accent);
+  text-underline-offset: 3px;
+}
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+
+.text-muted {
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
 
 .app-shell {
@@ -38,34 +121,54 @@ body {
   align-items: stretch;
 }
 
-/* --- Sidebar --- */
+/* --- Sidebar ---
+   Sidebar and main share the page ground; only cards sit on the surface. */
 
 .sidebar {
   width: var(--sidebar-w);
   flex: 0 0 var(--sidebar-w);
-  background: var(--panel);
-  border-right: 1px solid var(--panel-border);
-  padding: 24px 18px;
+  background: var(--color-bg);
+  padding: 28px 20px;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: var(--space-6);
   position: sticky;
   top: 0;
   height: 100vh;
   overflow-y: auto;
 }
 
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.brand-logo {
+  display: block;
+  width: 72px;
+  height: 72px;
+  margin-bottom: var(--space-3);
+}
+
 .brand h1 {
-  margin: 0 0 2px;
-  font-size: 1.25rem;
-  letter-spacing: -0.01em;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 20px;
+  margin: 0;
 }
 
 .brand-sub {
-  margin: 0;
-  color: var(--text-dim);
-  font-size: 0.85rem;
+  margin: 2px 0 0;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  font-size: 13px;
 }
+
+/* --- Nav pills ---
+   Built on the design system's .btn geometry, taken fully round. The active
+   tab is a filled accent pill and inactive tabs read muted, so the selected
+   one carries the accent alone. */
 
 .sidebar nav {
   display: flex;
@@ -74,63 +177,160 @@ body {
 }
 
 .nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  width: 100%;
+  cursor: pointer;
+  text-decoration: none;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 14px;
+  line-height: 1.2;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
   background: transparent;
   border: 1px solid transparent;
-  color: var(--text-dim);
-  padding: 10px 12px;
-  border-radius: 8px;
-  font-size: 0.92rem;
-  text-align: left;
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  padding: var(--space-2) var(--space-4);
+  border-radius: 999px;
+  transition: background 0.15s, color 0.15s;
 }
 
 .nav-btn:hover {
-  color: var(--text);
-  border-color: var(--panel-border);
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+}
+
+.nav-btn:active {
+  background: color-mix(in srgb, var(--color-text) 14%, transparent);
 }
 
 .nav-btn.active {
-  color: var(--bg);
-  background: var(--accent);
-  font-weight: 600;
+  color: var(--color-bg);
+  background: var(--color-accent);
 }
+
+.nav-btn.active:hover {
+  color: var(--color-bg);
+  background: var(--color-accent-400);
+}
+
+.nav-btn.active:active {
+  background: var(--color-accent-600);
+}
+
+/* Info / About sits above the tab group, separated by a step of space, and
+   reads as its own standalone entry point rather than a fourth tab. */
+.nav-info {
+  justify-content: center;
+  margin-bottom: var(--space-6);
+}
+
+/* --- Steppers ---
+   Freestanding rules fade to transparent at both ends over 48px — a Nocturne
+   signature. The rule rides on .controls so it hides with the steppers. */
 
 .controls {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding-top: 8px;
-  border-top: 1px solid var(--panel-border);
+  gap: 16px;
+  position: relative;
+  padding-top: var(--space-6);
+}
+
+.controls::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--color-divider) 48px,
+    var(--color-divider) calc(100% - 48px),
+    transparent
+  );
 }
 
 .control {
   display: flex;
   flex-direction: column;
-  gap: 6px;
 }
 
-.control label {
-  font-size: 0.85rem;
-  color: var(--text-dim);
+.control-label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 5px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+
+.stepper {
   display: flex;
-  justify-content: space-between;
+  align-items: stretch;
+  min-height: 36px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
 
-.control label span {
-  color: var(--accent);
-  font-weight: 600;
+.stepper:hover {
+  border-color: color-mix(in srgb, var(--color-text) 45%, transparent);
 }
 
-.control input[type="range"] {
-  width: 100%;
-  accent-color: var(--accent);
+.step-btn {
+  flex: none;
+  width: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-accent);
+  cursor: pointer;
+}
+
+.step-btn svg {
+  display: block;
+}
+
+.step-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+.step-btn:active:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+}
+
+.step-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.step-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.step-value {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
 }
 
 .sidebar-footer {
   margin-top: auto;
-  color: var(--text-dim);
-  font-size: 0.75rem;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  font-size: 11px;
 }
 
 /* --- Main content --- */
@@ -138,7 +338,7 @@ body {
 main {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 28px 24px 60px;
+  padding: 32px 32px 60px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -155,11 +355,13 @@ main {
   display: flex;
 }
 
+/* --- Cards --- */
+
 .panel {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius);
-  padding: 18px;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 24px;
   display: inline-block;
   max-width: 100%;
 }
@@ -178,7 +380,7 @@ main {
 
 .chart-row {
   display: flex;
-  gap: 16px;
+  gap: var(--space-6);
   flex-wrap: wrap;
   justify-content: center;
   align-items: flex-start;
@@ -191,15 +393,17 @@ main {
 
 .status {
   text-align: center;
-  color: var(--text-dim);
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
   padding: 40px 0;
-  font-size: 0.95rem;
+  font-size: 14px;
 }
 
-/* --- Info tab --- */
+/* --- Info tab ---
+   Not covered by the redesign handoff: it keeps its own reading-scale
+   headings rather than the system's display scale, restyled on the tokens. */
 
 .info h2 {
-  font-size: 1.2rem;
+  font-size: 19px;
   margin-top: 1.8em;
 }
 
@@ -208,40 +412,57 @@ main {
 }
 
 .info h3 {
-  font-size: 1.02rem;
+  font-size: 16px;
   margin: 1.4em 0 0.4em;
-  color: var(--text-dim);
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+
+.info p {
+  margin: 0 0 var(--space-4);
+  color: color-mix(in srgb, var(--color-text) 75%, transparent);
+  line-height: 1.6;
+}
+
+.info ul {
+  color: color-mix(in srgb, var(--color-text) 75%, transparent);
+  line-height: 1.7;
 }
 
 .info .formula {
-  background: var(--bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 8px;
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
   padding: 10px 14px;
   margin: 10px 0;
   overflow-x: auto;
 }
 
-.info ul {
-  color: var(--text-dim);
-  line-height: 1.7;
-}
-
-.info p {
-  color: var(--text-dim);
-  line-height: 1.6;
-}
-
 .info details.glossary {
   margin-top: 1.6em;
-  border-top: 1px solid var(--panel-border);
   padding-top: 1em;
+  position: relative;
+}
+
+.info details.glossary::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--color-divider) 48px,
+    var(--color-divider) calc(100% - 48px),
+    transparent
+  );
 }
 
 .info details.glossary summary {
   cursor: pointer;
-  font-weight: 600;
-  font-size: 1.05rem;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 16px;
 }
 
 /* --- Responsive: sidebar becomes a top bar --- */
@@ -256,10 +477,25 @@ main {
     height: auto;
     width: 100%;
     flex: 0 0 auto;
-    border-right: none;
-    border-bottom: 1px solid var(--panel-border);
     padding: 16px;
-    gap: 16px;
+    gap: var(--space-4);
+  }
+
+  /* Vertical room is scarce in the top-bar layout: the badge sits beside the
+     wordmark instead of above it, so the centered sidebar layout reverts to
+     a left-aligned row here. */
+  .brand {
+    flex-direction: row;
+    align-items: center;
+    text-align: left;
+    gap: var(--space-3);
+  }
+
+  .brand-logo {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    margin-bottom: 0;
   }
 
   .sidebar nav {
@@ -270,13 +506,17 @@ main {
   }
 
   .nav-btn {
+    width: auto;
     white-space: nowrap;
+  }
+
+  .nav-info {
+    margin-bottom: 0;
   }
 
   .controls {
     flex-direction: row;
-    border-top: none;
-    padding-top: 0;
+    padding-top: var(--space-4);
     gap: 16px;
   }
 

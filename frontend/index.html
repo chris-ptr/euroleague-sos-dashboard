@@ -4,6 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>EuroLeague Strength of Schedule</title>
+  <link rel="icon" type="image/png" href="assets/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geomini:wght@400;500;700&display=swap" />
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
@@ -16,25 +20,51 @@
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand">
-        <h1>EuroLeague SoS</h1>
-        <p class="brand-sub">2025-26 Season</p>
+        <img
+          class="brand-logo"
+          src="assets/logo.png"
+          srcset="assets/logo.png 1x, assets/logo@2x.png 2x"
+          width="72"
+          height="72"
+          alt="Strength of Schedule — Advanced Metric Dashboard, EuroLeague"
+        />
+        <div class="brand-text">
+          <h1>EuroLeague SoS</h1>
+          <p class="brand-sub">2025-26 Season</p>
+        </div>
       </div>
 
       <nav>
-        <button class="nav-btn active" data-view="info">Info / About</button>
+        <button class="nav-btn nav-info active" data-view="info">Info / About</button>
         <button class="nav-btn" data-view="nextn">Next-N Games SoS</button>
         <button class="nav-btn" data-view="scatter">SoS vs Team NetRtg</button>
         <button class="nav-btn" data-view="season">NetRtg &amp; Win% Table</button>
       </nav>
 
-      <div class="controls">
+      <div class="controls" id="controls">
         <div class="control">
-          <label for="round-slider">Round <span id="round-value">–</span></label>
-          <input type="range" id="round-slider" min="1" max="38" value="38" />
+          <span class="control-label" id="round-label">Round</span>
+          <div class="stepper" role="group" aria-labelledby="round-label">
+            <button type="button" class="step-btn" id="round-dec" aria-label="Previous round">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg>
+            </button>
+            <span class="step-value" id="round-value" aria-live="polite">–</span>
+            <button type="button" class="step-btn" id="round-inc" aria-label="Next round">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg>
+            </button>
+          </div>
         </div>
         <div class="control" id="n-next-control">
-          <label for="n-slider">Next N games <span id="n-value">5</span></label>
-          <input type="range" id="n-slider" min="1" max="10" value="5" />
+          <span class="control-label" id="n-label">Next N games</span>
+          <div class="stepper" role="group" aria-labelledby="n-label">
+            <button type="button" class="step-btn" id="n-dec" aria-label="Fewer games">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg>
+            </button>
+            <span class="step-value" id="n-value" aria-live="polite">5</span>
+            <button type="button" class="step-btn" id="n-inc" aria-label="More games">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg>
+            </button>
+          </div>
         </div>
       </div>
 

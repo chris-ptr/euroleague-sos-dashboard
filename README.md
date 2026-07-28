@@ -88,4 +88,4 @@ streamlit run app.py
 ```
 
 ## To do : <br />
-    - Upload the code for fetching the Euroleague team's logos and the code for the euroleague program parsing. <br />
+    - Upload the code for fetching the Euroleague team's logos and the code for the euroleague program parsing.
