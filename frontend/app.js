@@ -32,8 +32,13 @@ function publicBase() {
   return `${CONFIG.supabaseUrl}/storage/v1/object/public/${CONFIG.publicBucket}`;
 }
 
-async function fetchJSON(path) {
-  const res = await fetch(`${publicBase()}/${path}`, { cache: "no-store" });
+// Per-round chart specs never change once a round is published, so let the
+// browser cache them — otherwise every slider drag re-downloads the same JSON.
+// Only latest.json is refetched, since it's the pointer that does move.
+async function fetchJSON(path, { revalidate = false } = {}) {
+  const res = await fetch(`${publicBase()}/${path}`, {
+    cache: revalidate ? "no-store" : "default",
+  });
   if (!res.ok) {
     throw new Error(`Failed to fetch ${path}: ${res.status}`);
   }
@@ -177,7 +182,7 @@ async function init() {
   setView("info");
 
   try {
-    const latest = await fetchJSON("latest.json");
+    const latest = await fetchJSON("latest.json", { revalidate: true });
     state.latestRound = latest.round;
     state.round = latest.round;
     initSliders(latest.round);

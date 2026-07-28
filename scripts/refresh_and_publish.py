@@ -31,12 +31,15 @@ from sos.config import DEFAULT_SEASON, DEFAULT_COMPETITION, SCHEDULE_FILENAME, T
 from sos.data import load_games_metadata
 from sos.rounds import detect_latest_complete_round
 from sos.cache import compute_for_round, round_cache_path
-from sos.publish import build_round_artifacts
+from sos.publish import build_round_artifacts, sync_team_logos
 from sos.storage import SupabaseStorage
 
 
 def main() -> None:
     storage = SupabaseStorage()
+
+    n_logos = sync_team_logos(storage, SUPABASE_PUBLIC_BUCKET)
+    print(f"Synced {n_logos} team logo(s) to {SUPABASE_PUBLIC_BUCKET}.")
 
     with tempfile.TemporaryDirectory() as tmp:
         cache_dir = Path(tmp)

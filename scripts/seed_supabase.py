@@ -34,7 +34,7 @@ from sos.config import (
 )
 from sos.data import load_games_metadata
 from sos.cache import load_cached_round, round_cache_path
-from sos.publish import build_round_artifacts
+from sos.publish import build_round_artifacts, sync_team_logos
 from sos.storage import SupabaseStorage
 
 ROUND_FILE_RE = re.compile(r"round_(\d+)\.parquet$")
@@ -53,6 +53,9 @@ def main() -> None:
         return
 
     print(f"Found {len(round_numbers)} locally-cached round(s): {round_numbers}")
+
+    n_logos = sync_team_logos(storage, SUPABASE_PUBLIC_BUCKET)
+    print(f"Synced {n_logos} team logo(s) to {SUPABASE_PUBLIC_BUCKET}.")
 
     print("Fetching current EuroLeague game metadata (needed for schedule/next-N tables)...")
     games_meta, _team_stats_api, _ = load_games_metadata(

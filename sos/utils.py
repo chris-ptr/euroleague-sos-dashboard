@@ -1,9 +1,11 @@
 import os
 import base64
-from typing import Optional
+from typing import Iterator, Optional
+from urllib.parse import quote
 
 import pandas as pd
 
+from . import config
 from .config import TEAM_LOGO_DIR
 
 
@@ -96,7 +98,13 @@ def team_to_logo_path(team_name: str) -> Optional[str]:
 
 
 def logo_to_dataurl(path: str | None) -> str | None:
-    """Encode local image to base64 DataURL for Altair embedding."""
+    """
+    Encode local image to base64 DataURL for Altair embedding.
+
+    Only for locally-rendered charts (the Streamlit fallback in app.py), where
+    there is no hosted copy of the logos to point at. Published charts must use
+    logo_to_public_url instead — see the note there.
+    """
     if not path or not isinstance(path, str):
         return None
     if not os.path.exists(path):
@@ -105,3 +113,45 @@ def logo_to_dataurl(path: str | None) -> str | None:
         data = f.read()
     b64 = base64.b64encode(data).decode("utf-8")
     return f"data:image/png;base64,{b64}"
+
+
+# Storage prefix for the shared, uploaded-once copies of the team logos in the
+# public bucket. Object keys mirror the local filenames under team_logos/.
+LOGO_STORAGE_PREFIX = "logos"
+
+
+def logo_storage_key(path: str | None) -> str | None:
+    """Map a local logo path to its object key in the public bucket."""
+    if not path or not isinstance(path, str):
+        return None
+    return f"{LOGO_STORAGE_PREFIX}/{os.path.basename(path)}"
+
+
+def logo_to_public_url(path: str | None) -> str | None:
+    """
+    Resolve a local logo path to its public Supabase Storage URL.
+
+    This is what published chart specs reference instead of an inline base64
+    DataURL. A DataURL is repeated in full for *every row* that shows the logo
+    (in the Next-N table, once per team per game), which multiplied ~20 small
+    PNGs into hundreds of megabytes across the published JSON. A URL is a short
+    string the browser fetches and caches once per logo.
+    """
+    key = logo_storage_key(path)
+    if key is None:
+        return None
+    base_url = (config.SUPABASE_URL or "").rstrip("/")
+    if not base_url:
+        raise RuntimeError(
+            "SUPABASE_URL must be set to build public logo URLs for published charts."
+        )
+    quoted = "/".join(quote(part) for part in key.split("/"))
+    return f"{base_url}/storage/v1/object/public/{config.SUPABASE_PUBLIC_BUCKET}/{quoted}"
+
+
+def iter_local_logo_files() -> Iterator[tuple[str, str]]:
+    """Yield (local_path, storage_key) for each distinct team logo on disk."""
+    for filename in sorted(set(team_logo_file.values())):
+        path = os.path.join(logos_dir, filename)
+        if os.path.exists(path):
+            yield path, f"{LOGO_STORAGE_PREFIX}/{filename}"

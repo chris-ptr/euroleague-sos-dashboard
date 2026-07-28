@@ -14,6 +14,7 @@ def build_nextN_altair_logos_table(
     round_ref: int,
     n_next: int,
     *,
+    logo_path_to_url_fn=logo_to_dataurl,
     left_col_width: int = 260,
     sos_col_width: int = 120,
     games_col_width: int = 340,
@@ -56,7 +57,7 @@ def build_nextN_altair_logos_table(
         sos_net = row.get("SoS_Net_nextN", row.get("SoS_Net_next5", np.nan))
 
         team_logo_path = team_to_logo_path_fn(team_norm)
-        team_logo_dataurl = logo_to_dataurl(team_logo_path)
+        team_logo_dataurl = logo_path_to_url_fn(team_logo_path)
 
         for idx in range(1, n_next + 1):
             col = f"Opp{idx}"
@@ -71,7 +72,7 @@ def build_nextN_altair_logos_table(
             opp_netrtg = net_map.get(opp_norm, np.nan)
 
             opp_logo_path = team_to_logo_path_fn(opp_norm)
-            opp_logo_dataurl = logo_to_dataurl(opp_logo_path)
+            opp_logo_dataurl = logo_path_to_url_fn(opp_logo_path)
 
             long_rows.append(
                 {
@@ -253,7 +254,7 @@ def make_sos_table_chart(
     sos_net: pd.DataFrame,
     sos_win: pd.DataFrame,
     team_to_logo_path,
-    logo_to_dataurl,
+    logo_path_to_url_fn,
     *,
     round_ref: int | None = None,
     season_label: str | None = None,
@@ -302,7 +303,7 @@ def make_sos_table_chart(
     combined = combined.sort_values("SoS_Net", ascending=False).reset_index(drop=True)
 
     combined["logo_path"] = combined["TEAM_NAME"].apply(team_to_logo_path)
-    combined["logo_url"] = combined["logo_path"].apply(logo_to_dataurl)
+    combined["logo_url"] = combined["logo_path"].apply(logo_path_to_url_fn)
 
     combined["TEAM_KEY"] = combined["TEAM_NAME"]
     combined["TEAM_LABEL"] = combined["TEAM_NAME"].apply(
@@ -476,7 +477,7 @@ def make_sos_scatter_and_side_table(
     sos_net: pd.DataFrame,
     team_ratings: pd.DataFrame,
     team_to_logo_path,
-    logo_to_dataurl,
+    logo_path_to_url_fn,
     *,
     top_k: int = 5,
     bottom_k: int = 5,
@@ -522,7 +523,7 @@ def make_sos_scatter_and_side_table(
     )
 
     df["logo_path"] = df["TEAM_NAME"].apply(team_to_logo_path)
-    df["logo_url"] = df["logo_path"].apply(logo_to_dataurl)
+    df["logo_url"] = df["logo_path"].apply(logo_path_to_url_fn)
 
     df["Rank"] = df["NetRtg"].rank(ascending=False, method="first").astype(int)
     df["Label"] = ""
