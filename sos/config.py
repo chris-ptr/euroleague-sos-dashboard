@@ -6,7 +6,6 @@ DEFAULT_SEASON = 2025
 DEFAULT_COMPETITION = "E"
 
 # Input datasets
-SCHEDULE_FILENAME = "EL_2025_26_EL_RS_Schedule.csv"
 # Lives inside the published tree so the browser can fetch the same PNGs the
 # local Streamlit fallback reads off disk — one copy, no build-time copy step.
 TEAM_LOGO_DIR = Path("frontend/data/logos")

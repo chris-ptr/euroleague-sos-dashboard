@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Tuple
 
 import pandas as pd
-from euroleague_api.team_stats import TeamStats
+from euroleague_api.boxscore_data import BoxScoreData
 
 from .compute import (
     compute_team_ratings_up_to_round,
@@ -56,7 +56,7 @@ def compute_for_round(
     cache_dir: Path,
     games_meta: pd.DataFrame,
     season: int,
-    team_stats_api: TeamStats,
+    boxscore_api: BoxScoreData,
     round_max: int,
     force: bool = False,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -78,7 +78,7 @@ def compute_for_round(
     team_ratings = compute_team_ratings_up_to_round(
         games_meta=games_meta,
         season=season,
-        team_stats_api=team_stats_api,
+        boxscore_api=boxscore_api,
         round_max=round_max,
     )
 

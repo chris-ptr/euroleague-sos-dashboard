@@ -1,12 +1,11 @@
-from pathlib import Path
 from typing import Dict, Tuple
 
 import numpy as np
 import pandas as pd
 
-from euroleague_api.team_stats import TeamStats
+from euroleague_api.boxscore_data import BoxScoreData
 
-from .data import load_clean_schedule
+from .data import load_schedule_from_api
 from .utils import normalize_team_name, team_to_logo_path
 
 
@@ -14,12 +13,16 @@ def compute_team_net_rating(
     team_name: str,
     season: int,
     games_meta: pd.DataFrame,
-    team_stats_api: TeamStats,
+    boxscore_api: BoxScoreData,
 ) -> dict:
     """
     Calculate season-to-date efficiency metrics (OffRtg, DefRtg, NetRtg) for a team.
-    
+
     Aggregates points and possessions across all games played so far.
+
+    Possessions are estimated per game from box-score totals (TeamStats has
+    no single-game granularity in euroleague_api >=0.1.0):
+        FGA2 + FGA3 + 0.44*FTA - OREB + TOV
     """
     df = games_meta.copy()
     df = df[
@@ -43,23 +46,33 @@ def compute_team_net_rating(
             continue
 
         try:
-            adv = team_stats_api.get_team_advanced_stats_single_game(season, gamecode)
+            box = boxscore_api.get_players_boxscore_stats(season, gamecode)
         except Exception:
             continue
-        if adv is None or adv.empty:
+        if box is None or box.empty:
             continue
 
-        if row["hometeam"] == team_name:
-            idx = 0
+        is_home = row["hometeam"] == team_name
+        if is_home:
             pts_for = float(row["homescore"])
             pts_against = float(row["awayscore"])
         else:
-            idx = 1
             pts_for = float(row["awayscore"])
             pts_against = float(row["homescore"])
 
-        # Fetch possessions from API response
-        poss = float(adv.iloc[idx, 3])
+        totals = box[(box["Player"] == "Total") & (box["Home"] == int(is_home))]
+        if totals.empty:
+            continue
+        t = totals.iloc[0]
+
+        # Estimate possessions from box-score totals (see docstring)
+        fga = float(t["FieldGoalsAttempted2"]) + float(t["FieldGoalsAttempted3"])
+        poss = (
+            fga
+            + 0.44 * float(t["FreeThrowsAttempted"])
+            - float(t["OffensiveRebounds"])
+            + float(t["Turnovers"])
+        )
         if poss <= 0 or np.isnan(poss):
             continue
 
@@ -112,7 +125,7 @@ def compute_team_net_rating(
 def compute_team_ratings_up_to_round(
     games_meta: pd.DataFrame,
     season: int,
-    team_stats_api: TeamStats,
+    boxscore_api: BoxScoreData,
     round_max: int,
     round_col: str = "Round",
 ) -> pd.DataFrame:
@@ -128,7 +141,7 @@ def compute_team_ratings_up_to_round(
             team_name=team,
             season=season,
             games_meta=df,
-            team_stats_api=team_stats_api,
+            boxscore_api=boxscore_api,
         )
         rows.append(res)
 
@@ -347,10 +360,11 @@ def compute_sos_winpct_next5(
 
 def make_nextN_sos_table(
     current_round: int,
-    schedule_path: str | Path,
+    season: int,
     games_meta: pd.DataFrame,
     team_ratings: pd.DataFrame,
     n_next: int = 5,
+    competition_code: str = "E",
 ) -> pd.DataFrame:
     """Generate a combined SOS forecasting table for the next N games."""
     # Standardize metadata and ratings
@@ -362,7 +376,7 @@ def make_nextN_sos_table(
     team_ratings["TEAM_NAME"] = team_ratings["TEAM_NAME"].apply(normalize_team_name)
 
     # Load cleaned schedule data
-    games_sched = load_clean_schedule(schedule_path)
+    games_sched = load_schedule_from_api(season, competition_code)
 
     # Slice upcoming games
     team_to_next_games = build_next_n_games_per_team(

@@ -21,7 +21,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sos.config import (
     DEFAULT_SEASON,
     DEFAULT_COMPETITION,
-    SCHEDULE_FILENAME,
     CACHE_DIR,
     PUBLISH_DIR,
 )
@@ -45,7 +44,7 @@ def main() -> None:
     print(f"Found {len(round_numbers)} locally-cached round(s): {round_numbers}")
 
     print("Fetching current EuroLeague game metadata (needed for schedule/next-N tables)...")
-    games_meta, _team_stats_api, _ = load_games_metadata(
+    games_meta, _boxscore_api, _ = load_games_metadata(
         season=DEFAULT_SEASON,
         competition_code=DEFAULT_COMPETITION,
     )
@@ -61,7 +60,7 @@ def main() -> None:
         print(f"  round {round_num}: building chart JSON...")
         artifacts = build_round_artifacts(
             round_num=round_num,
-            schedule_path=SCHEDULE_FILENAME,
+            season=DEFAULT_SEASON,
             games_meta=games_meta,
             team_ratings=team_ratings,
             sos_net=sos_net,

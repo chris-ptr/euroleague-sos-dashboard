@@ -25,7 +25,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sos.config import (
     DEFAULT_SEASON,
     DEFAULT_COMPETITION,
-    SCHEDULE_FILENAME,
     TOTAL_SEASON_ROUNDS,
     CACHE_DIR,
     PUBLISH_DIR,
@@ -45,14 +44,14 @@ def main() -> None:
     print(f"Found {len(existing_rounds)} cached round(s): {sorted(existing_rounds)}")
 
     print("Fetching current EuroLeague game metadata...")
-    games_meta, team_stats_api, _ = load_games_metadata(
+    games_meta, boxscore_api, _ = load_games_metadata(
         season=DEFAULT_SEASON,
         competition_code=DEFAULT_COMPETITION,
     )
 
     # Cap at the Regular Season length: euroleague_api numbers Playoffs/Final Four
-    # rounds continuing past 38, but the Next-N forecast schedule CSV (EL_*_RS_Schedule.csv)
-    # only covers the Regular Season, so anything beyond it has no upcoming games to forecast.
+    # rounds continuing past 38, but the Next-N forecast schedule is filtered to the
+    # Regular Season, so anything beyond it has no upcoming games to forecast.
     latest_round = min(detect_latest_complete_round(games_meta), TOTAL_SEASON_ROUNDS)
     print(f"Latest complete round (capped at Regular Season length {TOTAL_SEASON_ROUNDS}): {latest_round}")
 
@@ -65,7 +64,7 @@ def main() -> None:
             cache_dir=CACHE_DIR,
             games_meta=games_meta,
             season=DEFAULT_SEASON,
-            team_stats_api=team_stats_api,
+            boxscore_api=boxscore_api,
             round_max=round_num,
         )
 
@@ -77,7 +76,7 @@ def main() -> None:
 
         artifacts = build_round_artifacts(
             round_num=round_num,
-            schedule_path=SCHEDULE_FILENAME,
+            season=DEFAULT_SEASON,
             games_meta=games_meta,
             team_ratings=team_ratings,
             sos_net=sos_net,

@@ -34,7 +34,7 @@ def write_artifacts(out_dir: Path, artifacts: Dict[str, dict]) -> None:
 
 def build_round_artifacts(
     round_num: int,
-    schedule_path: str | Path,
+    season: int,
     games_meta: pd.DataFrame,
     team_ratings: pd.DataFrame,
     sos_net: pd.DataFrame,
@@ -47,7 +47,7 @@ def build_round_artifacts(
     for n in NEXT_N_VALUES:
         nextN_df = make_nextN_sos_table(
             current_round=round_num,
-            schedule_path=schedule_path,
+            season=season,
             games_meta=games_meta,
             team_ratings=team_ratings,
             n_next=n,

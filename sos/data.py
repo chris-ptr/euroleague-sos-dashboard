@@ -1,10 +1,11 @@
-from pathlib import Path
+from functools import lru_cache
 from typing import Tuple, List
 
 import pandas as pd
 
-from euroleague_api.team_stats import TeamStats
+from euroleague_api.boxscore_data import BoxScoreData
 from euroleague_api.game_metadata import GameMetadata
+from euroleague_api.schedule import Schedule
 
 from .utils import normalize_team_name
 
@@ -13,7 +14,7 @@ def load_games_metadata(
     season: int,
     competition_code: str = "E",
     cols_to_keep: List[str] | None = None,
-) -> Tuple[pd.DataFrame, TeamStats, GameMetadata]:
+) -> Tuple[pd.DataFrame, BoxScoreData, GameMetadata]:
     """
     Fetch and clean EuroLeague season metadata via API wrappers.
 
@@ -28,8 +29,10 @@ def load_games_metadata(
     -------
     games_meta : pd.DataFrame
         Cleaned game records (rounds, scores, teams).
-    team_stats_api : TeamStats
-    metadata_api   : GameMetadata
+    boxscore_api : BoxScoreData
+        Used to derive per-game possessions for NetRtg (TeamStats has no
+        single-game granularity in euroleague_api >=0.1.0).
+    metadata_api : GameMetadata
     """
     if cols_to_keep is None:
         # Default columns required for SOS calculations
@@ -47,7 +50,7 @@ def load_games_metadata(
         ]
 
     # API helper initialization
-    team_stats_api = TeamStats(competition_code)
+    boxscore_api = BoxScoreData(competition_code)
     metadata_api = GameMetadata(competition_code)
 
     # Fetch raw seasonal data
@@ -68,31 +71,66 @@ def load_games_metadata(
     if "gameCode" not in games_meta.columns and "gamecode" in games_meta.columns:
         games_meta["gameCode"] = games_meta["gamecode"]
 
-    return games_meta, team_stats_api, metadata_api
+    return games_meta, boxscore_api, metadata_api
 
 
-def load_clean_schedule(csv_path: str | Path) -> pd.DataFrame:
+def clean_api_schedule(df: pd.DataFrame, regular_season_only: bool = True) -> pd.DataFrame:
     """
-    Load and normalize the seasonal schedule for SOS forecasting.
+    Normalize a raw `Schedule.get_schedule()` frame into the shape
+    `build_next_n_games_per_team` expects: Round, DateTime, Home_Team, Away_Team.
 
-    Expected CSV columns: Round, Date, Local_Time, GMT_Time, Home_Team, Away_Team.
+    Split out from `load_schedule_from_api` so the reshaping can be tested
+    without hitting the network.
     """
-    df = pd.read_csv(csv_path)
+    df = df.copy()
 
-    # Clean missing values
-    df = df.replace({"<NA>": pd.NA, "nan": pd.NA, "None": pd.NA})
+    if regular_season_only:
+        # Playoffs/Final Four keep numbering past the Regular Season length but
+        # have no fixed future fixtures to forecast, so they're dropped here.
+        df = df[df["round"] == "RS"].copy()
 
-    # Convert to datetime for chronological sorting
+    df["Round"] = df["gameday"].astype(int)
+
+    # e.g. "Sep 30, 2025" + "20:45" (local tip-off, same basis as the old CSV)
     df["DateTime"] = pd.to_datetime(
-        df["Date"] + " " + df["Local_Time"],
+        df["date"].str.strip() + " " + df["startime"].str.strip(),
+        format="%b %d, %Y %H:%M",
         errors="coerce",
     )
 
-    # Sort games by round and tip-off time
-    df = df.sort_values(["Round", "DateTime"]).reset_index(drop=True)
-
     # Standardize team names
-    df["Home_Team"] = df["Home_Team"].apply(normalize_team_name)
-    df["Away_Team"] = df["Away_Team"].apply(normalize_team_name)
+    df["Home_Team"] = df["hometeam"].apply(normalize_team_name)
+    df["Away_Team"] = df["awayteam"].apply(normalize_team_name)
 
-    return df
+    # Sort games by round and tip-off time
+    return df.sort_values(["Round", "DateTime"]).reset_index(drop=True)
+
+
+@lru_cache(maxsize=4)
+def _fetch_raw_schedule(season: int, competition_code: str) -> pd.DataFrame:
+    """
+    Cached raw schedule fetch — one season's schedule is one HTTP call.
+
+    build_round_artifacts builds a Next-N table per N per round, so an
+    uncached fetch would re-download the same schedule hundreds of times in a
+    single publish run. Callers only ever read the result (clean_api_schedule
+    copies before touching it), so sharing the frame is safe. Cached for the
+    process lifetime, so a long-lived process won't see mid-run fixture moves.
+    """
+    return Schedule(competition_code).get_schedule(season)
+
+
+def load_schedule_from_api(
+    season: int,
+    competition_code: str = "E",
+    regular_season_only: bool = True,
+) -> pd.DataFrame:
+    """
+    Fetch and normalize the seasonal schedule for SOS forecasting.
+
+    Replaces the hand-maintained EL_*_RS_Schedule.csv: the API schedule updates
+    itself as fixtures move, so postponed games and home/away swaps stay correct
+    without anyone re-exporting a CSV each season.
+    """
+    raw = _fetch_raw_schedule(season, competition_code)
+    return clean_api_schedule(raw, regular_season_only=regular_season_only)

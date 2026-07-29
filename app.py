@@ -7,7 +7,6 @@ import time
 from sos.config import (
     DEFAULT_SEASON,
     DEFAULT_COMPETITION,
-    SCHEDULE_FILENAME,
     TOTAL_SEASON_ROUNDS,
     DEFAULT_N_NEXT,
     CACHE_DIR,
@@ -63,31 +62,28 @@ st.warning("This project is migrating to Vercel. You can access the new version 
 st.set_page_config(page_title="EuroLeague SoS Dashboard", layout="wide")
 st.title("EuroLeague Strength of Schedule Dashboard")
 
-# Local schedule file path
-schedule_path = SCHEDULE_FILENAME
-
 # Data loading (fetched before the sidebar so the round selector can be
 # bounded by the actual latest completed round, not a hardcoded number)
 def load_base_data(season: int, competition_code: str):
     if st.session_state.base_loaded:
         return (
             st.session_state.games_meta,
-            st.session_state.team_stats_api,
+            st.session_state.boxscore_api,
         )
 
     with st.spinner("Fetching API data..."):
-        games_meta, team_stats_api, _metadata_api = load_games_metadata(
+        games_meta, boxscore_api, _metadata_api = load_games_metadata(
             season=season,
             competition_code=competition_code,
         )
 
     st.session_state.games_meta = games_meta
-    st.session_state.team_stats_api = team_stats_api
+    st.session_state.boxscore_api = boxscore_api
     st.session_state.base_loaded = True
-    return games_meta, team_stats_api
+    return games_meta, boxscore_api
 
 
-games_meta, team_stats_api = load_base_data(
+games_meta, boxscore_api = load_base_data(
     season=DEFAULT_SEASON,
     competition_code=DEFAULT_COMPETITION,
 )
@@ -208,14 +204,13 @@ def compute_for_round(round_max: int):
         cache_dir=CACHE_DIR,
         games_meta=games_meta,
         season=DEFAULT_SEASON,
-        team_stats_api=team_stats_api,
+        boxscore_api=boxscore_api,
         round_max=round_max,
     )
 
 
 def load_nextN_sos(
     current_round: int,
-    schedule_path: str,
     games_meta: pd.DataFrame,
     team_ratings: pd.DataFrame,
     n_next: int,
@@ -223,7 +218,7 @@ def load_nextN_sos(
     """Calculate SOS for the upcoming N games."""
     return make_nextN_sos_table(
         current_round=current_round,
-        schedule_path=schedule_path,
+        season=DEFAULT_SEASON,
         games_meta=games_meta,
         team_ratings=team_ratings,
         n_next=n_next,
@@ -302,9 +297,9 @@ The objective is to contextualize team performance by answering:
         """
 ## Data sources
 
-### Schedule (Parsed PDF)
-The Regular Season schedule was parsed from official EuroLeague documents:
-- `EL_2025_26_EL_RS_Schedule.csv`
+### Schedule (euroleague-api)
+The Regular Season schedule is fetched live via `Schedule.get_schedule()`, so
+postponed games and home/away changes stay current.
 
 Used for forecasting future opponent difficulty.
 
@@ -475,7 +470,6 @@ Future updates will include EuroCup support and historical seasonal analysis.
         st.markdown(
             """
 - Required files:
-  - `EL_2025_26_EL_RS_Schedule.csv`
   - `frontend/data/logos/` directory
 - Launch command:
   - `streamlit run app.py`
@@ -490,7 +484,6 @@ elif selected_tab == "Next-N Games SoS":
             team_ratings, sos_net, sos_win = compute_for_round(current_round)
             sos_nextN_df = load_nextN_sos(
                 current_round=int(current_round),
-                schedule_path=schedule_path,
                 games_meta=games_meta,
                 team_ratings=team_ratings,
                 n_next=int(n_next),
@@ -508,9 +501,6 @@ elif selected_tab == "Next-N Games SoS":
         st.altair_chart(nextN_chart, width=NEXTN_STREAMLIT_WIDTH)
 
 
-    except FileNotFoundError:
-        st.error(f"Schedule file missing: {schedule_path}")
-        st.stop()
     except Exception as e:
         st.error(f"Computation error: {e}")
         st.stop()
