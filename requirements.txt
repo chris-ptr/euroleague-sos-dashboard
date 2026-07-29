@@ -3,6 +3,6 @@ pandas
 numpy
 altair
 Pillow
-euroleague_api
+euroleague_api>=0.1.0
 pyarrow
 requests
