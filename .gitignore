@@ -11,6 +11,5 @@ SETUP.md
 
 .env
 
-# NOTE: cache/rounds/*.parquet and frontend/data/ are deliberately tracked —
-# the parquet cache is the record of what has been computed, and the published
-# chart JSON is what Vercel serves. Do not add them here.
+# Raw per-game box scores downloaded by scripts/recompute_all.py.
+.boxscore_cache/

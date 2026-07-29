@@ -29,4 +29,4 @@ SEASON_KWARGS = dict(
     title_font_size=16,
 )
 
-NEXT_N_VALUES = tuple(range(1, 11))
+NEXT_N_VALUES = tuple(range(1, 6))

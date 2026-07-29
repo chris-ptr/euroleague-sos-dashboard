@@ -131,7 +131,7 @@ with st.sidebar:
     if current_round == LATEST_AVAILABLE_ROUND:
         st.caption("Showing data up to the latest available round.")
 
-    n_next = st.slider("Number of next games (N)", 1, 10, DEFAULT_N_NEXT, 1)
+    n_next = st.slider("Number of next games (N)", 1, 5, DEFAULT_N_NEXT, 1)
 
 
 season_label = f"{int(season)}-{(int(season) + 1) % 100:02d}"

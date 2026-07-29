@@ -185,7 +185,7 @@ function initSteppers(latestRound) {
     incEl: els.nInc,
     valueEl: els.nValue,
     min: 1,
-    max: 10,
+    max: 5,
     get: () => state.nNext,
     set: (v) => { state.nNext = v; },
   });

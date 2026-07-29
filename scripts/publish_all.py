@@ -26,9 +26,28 @@ from sos.config import (
 )
 from sos.data import load_games_metadata
 from sos.cache import load_cached_round
+from sos.presets import NEXT_N_VALUES
 from sos.publish import build_round_artifacts, write_artifacts
 
 ROUND_FILE_RE = re.compile(r"round_(\d+)\.parquet$")
+NEXT_N_FILE_RE = re.compile(r"^(\d+)\.json$")
+
+
+def prune_stale_next_n(round_num: int) -> int:
+    """
+    Delete published next-N specs for values no longer in NEXT_N_VALUES.
+
+    Rebuilding only overwrites the files it generates, so lowering the N cap
+    would otherwise leave the old higher-N JSON on disk and reachable by URL.
+    """
+    next_n_dir = PUBLISH_DIR / f"rounds/{round_num}/next-n"
+    removed = 0
+    for path in next_n_dir.glob("*.json"):
+        m = NEXT_N_FILE_RE.match(path.name)
+        if m and int(m.group(1)) not in NEXT_N_VALUES:
+            path.unlink()
+            removed += 1
+    return removed
 
 
 def main() -> None:
@@ -68,6 +87,9 @@ def main() -> None:
             season_label=season_label,
         )
         write_artifacts(PUBLISH_DIR, artifacts)
+        stale = prune_stale_next_n(round_num)
+        if stale:
+            print(f"  round {round_num}: pruned {stale} stale next-N spec(s)")
 
     latest_round = max(round_numbers)
     write_artifacts(
