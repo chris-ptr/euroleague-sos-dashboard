@@ -12,6 +12,12 @@
   --color-accent: #9184d9;
   --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
 
+  /* Design option 5c, "EuroLeague crimson" — carried by the three chart tabs
+     only. Info / About and the rest of the system keep the Nocturne blurple,
+     so the crimson reads as "this is a chart view" rather than as a second
+     system accent. 4.63:1 on the sidebar ground, so it clears AA as label text. */
+  --color-tab-accent: #d9576a;
+
   /* Tonal ramps — generated in OKLCH on one shared lightness scale, so the
      same step of any role matches the others in visual value. */
   --color-neutral-100: #f3f5fe;
@@ -60,7 +66,7 @@
   --shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0, 0, 0, 0.55);
   --shadow-lg: 0 0 0 1px #9397ab, 0 16px 40px rgba(0, 0, 0, 0.65);
 
-  --sidebar-w: 260px;
+  --sidebar-w: 390px;
 }
 
 *,
@@ -128,7 +134,7 @@ a {
   width: var(--sidebar-w);
   flex: 0 0 var(--sidebar-w);
   background: var(--color-bg);
-  padding: 28px 20px;
+  padding: 42px 30px;
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
@@ -147,22 +153,22 @@ a {
 
 .brand-logo {
   display: block;
-  width: 72px;
-  height: 72px;
-  margin-bottom: var(--space-3);
+  width: 108px;
+  height: 108px;
+  margin-bottom: var(--space-4);
 }
 
 .brand h1 {
   font-family: var(--font-heading);
   font-weight: var(--font-heading-weight);
-  font-size: 20px;
+  font-size: 30px;
   margin: 0;
 }
 
 .brand-sub {
-  margin: 2px 0 0;
+  margin: 3px 0 0;
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
-  font-size: 13px;
+  font-size: 19px;
 }
 
 /* --- Nav pills ---
@@ -173,26 +179,28 @@ a {
 .sidebar nav {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 9px;
 }
 
 .nav-btn {
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 6px;
+  gap: 9px;
   width: 100%;
   cursor: pointer;
   text-decoration: none;
   font-family: var(--font-heading);
   font-weight: var(--font-heading-weight);
-  font-size: 14px;
+  font-size: 21px;
   line-height: 1.2;
   color: color-mix(in srgb, var(--color-text) 70%, transparent);
   background: transparent;
   border: 1px solid transparent;
-  padding: var(--space-2) var(--space-4);
-  border-radius: 999px;
+  padding: var(--space-3) var(--space-6);
+  /* Square-ish, to match the corner ticks the active tab carries — a pill
+     background behind 4px-radius brackets reads as two different shapes. */
+  border-radius: var(--radius-sm);
   transition: background 0.15s, color 0.15s;
 }
 
@@ -205,25 +213,75 @@ a {
   background: color-mix(in srgb, var(--color-text) 14%, transparent);
 }
 
+/* Active tab: a soft crimson wash plus four corner ticks, rather than the solid
+   fill it used to carry. The character comes from the brackets, so the fill
+   stays quiet enough to read the label against. */
 .nav-btn.active {
+  position: relative;
+  color: var(--color-tab-accent);
+  background: color-mix(in srgb, var(--color-tab-accent) 12%, transparent);
+  --bracket-color: var(--color-tab-accent);
+  --bracket-inset: -1px;
+  --bracket-radius: var(--radius-sm);
+  --bracket-size: 12px;
+}
+
+.nav-btn.active:hover {
+  background: color-mix(in srgb, var(--color-tab-accent) 18%, transparent);
+}
+
+.nav-btn.active:active {
+  background: color-mix(in srgb, var(--color-tab-accent) 26%, transparent);
+}
+
+/* Where-am-I marker: every chart tab carries an empty ring on its right edge,
+   and the active one fills that ring with the ball. One indicator that reads
+   as a set — you can see at a glance which of the three you are on, and that
+   the other two are the same kind of thing. Info / About is excluded: it is a
+   standalone entry point, not one of the three chart views. */
+.nav-btn:not(.nav-info)::after {
+  content: "";
+  flex: none;
+  margin-left: auto;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--color-text) 28%, transparent);
+  transition: border-color 0.15s;
+}
+
+.nav-btn:not(.nav-info):hover::after {
+  border-color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+
+.nav-btn:not(.nav-info).active::after {
+  border-color: transparent;
+  background: url("assets/basketball.png") center / contain no-repeat;
+}
+
+/* Info / About sits above the tab group, separated by a step of space, and
+   reads as its own standalone entry point rather than a fourth tab. It keeps
+   the original solid pill instead of the bracketed treatment for exactly that
+   reason: the brackets mark which chart you are looking at, and Info is not
+   one of the charts. */
+.nav-info {
+  justify-content: center;
+  margin-bottom: var(--space-6);
+  border-radius: 999px;
+}
+
+.nav-info.active {
   color: var(--color-bg);
   background: var(--color-accent);
 }
 
-.nav-btn.active:hover {
+.nav-info.active:hover {
   color: var(--color-bg);
   background: var(--color-accent-400);
 }
 
-.nav-btn.active:active {
+.nav-info.active:active {
   background: var(--color-accent-600);
-}
-
-/* Info / About sits above the tab group, separated by a step of space, and
-   reads as its own standalone entry point rather than a fourth tab. */
-.nav-info {
-  justify-content: center;
-  margin-bottom: var(--space-6);
 }
 
 /* --- Steppers ---
@@ -261,58 +319,74 @@ a {
 
 .control-label {
   display: block;
-  font-size: 12px;
-  margin-bottom: 5px;
+  font-size: 18px;
+  margin-bottom: 8px;
   color: color-mix(in srgb, var(--color-text) 70%, transparent);
 }
 
 .stepper {
   display: flex;
-  align-items: stretch;
-  min-height: 36px;
+  align-items: center;
+  gap: 8px;
+  min-height: 54px;
+  padding: 7px;
   background: var(--color-surface);
   border: 1px solid var(--color-divider);
   border-radius: var(--radius-md);
-  overflow: hidden;
 }
 
 .stepper:hover {
   border-color: color-mix(in srgb, var(--color-text) 45%, transparent);
 }
 
+/* The arrows are the only thing here you can press, so they are drawn as
+   actual buttons — raised chip, own edge, own fill — rather than bare glyphs
+   sharing the field with the number. They carry the chart tabs' crimson, so
+   every interactive accent in the sidebar reads as one family. */
 .step-btn {
   flex: none;
-  width: 34px;
+  width: 40px;
+  align-self: stretch;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--color-accent);
+  border: 1px solid color-mix(in srgb, var(--color-tab-accent) 45%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-tab-accent) 12%, transparent);
+  box-shadow: 0 1px 0 color-mix(in srgb, #000 35%, transparent);
+  color: var(--color-tab-accent);
   cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, transform 0.06s;
 }
 
 .step-btn svg {
   display: block;
+  width: 20px;
+  height: 20px;
 }
 
 .step-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  background: color-mix(in srgb, var(--color-tab-accent) 24%, transparent);
+  border-color: var(--color-tab-accent);
 }
 
+/* Presses down onto the surface — the shadow goes as the chip travels. */
 .step-btn:active:not(:disabled) {
-  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  background: color-mix(in srgb, var(--color-tab-accent) 34%, transparent);
+  transform: translateY(1px);
+  box-shadow: none;
 }
 
 .step-btn:disabled {
-  opacity: 0.45;
+  opacity: 0.4;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .step-btn:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
+  outline: 2px solid var(--color-tab-accent);
+  outline-offset: 2px;
 }
 
 .step-value {
@@ -322,15 +396,44 @@ a {
   justify-content: center;
   font-family: var(--font-heading);
   font-weight: var(--font-heading-weight);
-  font-size: 14px;
+  font-size: 21px;
   font-variant-numeric: tabular-nums;
   color: var(--color-text);
+}
+
+/* Round is typeable. Deliberately no font declarations here — the .step-value
+   rule above already sets them, and a `font: inherit` shorthand would reset
+   the face back to the body font. */
+input.step-value {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 4px 0;
+  text-align: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  caret-color: var(--color-tab-accent);
+  cursor: text;
+  transition: background 0.12s;
+}
+
+input.step-value:hover {
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+}
+
+input.step-value:focus,
+input.step-value:focus-visible {
+  outline: 2px solid var(--color-tab-accent);
+  outline-offset: 1px;
+  background: color-mix(in srgb, var(--color-text) 12%, transparent);
 }
 
 .sidebar-footer {
   margin-top: auto;
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
-  font-size: 11px;
+  font-size: 16px;
 }
 
 /* --- Main content --- */
@@ -364,6 +467,40 @@ main {
   padding: 24px;
   display: inline-block;
   max-width: 100%;
+}
+
+/* Scoreboard brackets — four accent corner ticks, like a broadcast scorebug.
+   Drawn as one pseudo-element: a full rounded outline masked down to just its
+   corners. That keeps the outer radius correct on every tick and needs no extra
+   markup, where four positioned spans per bracketed element would need sixteen.
+   Each host sets its own --bracket-* values; they inherit into the ::before. */
+.nav-btn.active:not(.nav-info)::before,
+.panel:has(> .chart-container)::before {
+  content: "";
+  position: absolute;
+  inset: var(--bracket-inset);
+  pointer-events: none;
+  border: 2px solid var(--bracket-color, var(--color-accent));
+  border-radius: var(--bracket-radius);
+  -webkit-mask:
+    linear-gradient(#000 0 0) top left / var(--bracket-size) var(--bracket-size) no-repeat,
+    linear-gradient(#000 0 0) top right / var(--bracket-size) var(--bracket-size) no-repeat,
+    linear-gradient(#000 0 0) bottom left / var(--bracket-size) var(--bracket-size) no-repeat,
+    linear-gradient(#000 0 0) bottom right / var(--bracket-size) var(--bracket-size) no-repeat;
+  mask:
+    linear-gradient(#000 0 0) top left / var(--bracket-size) var(--bracket-size) no-repeat,
+    linear-gradient(#000 0 0) top right / var(--bracket-size) var(--bracket-size) no-repeat,
+    linear-gradient(#000 0 0) bottom left / var(--bracket-size) var(--bracket-size) no-repeat,
+    linear-gradient(#000 0 0) bottom right / var(--bracket-size) var(--bracket-size) no-repeat;
+}
+
+/* Every chart panel is bracketed; the Info panel holds prose, not a chart,
+   and :has() keeps that distinction in CSS rather than in the markup. */
+.panel:has(> .chart-container) {
+  position: relative;
+  --bracket-inset: 10px;
+  --bracket-radius: 4px;
+  --bracket-size: 16px;
 }
 
 #view-info .panel {
@@ -514,6 +651,33 @@ main {
     margin-bottom: 0;
   }
 
+  /* The sidebar's 1.5x type is sized for a 390px rail standing beside the
+     charts. In the top-bar layout it would eat the screen, so the whole
+     cluster reverts to the original scale here. */
+  .brand h1 {
+    font-size: 20px;
+  }
+
+  .brand-sub {
+    font-size: 13px;
+  }
+
+  .nav-btn {
+    font-size: 14px;
+    gap: 6px;
+    padding: var(--space-2) var(--space-4);
+  }
+
+  .nav-btn.active {
+    --bracket-size: 8px;
+  }
+
+  .nav-btn:not(.nav-info)::after {
+    width: 18px;
+    height: 18px;
+    border-width: 1.5px;
+  }
+
   .controls {
     flex-direction: row;
     padding-top: var(--space-4);
@@ -522,6 +686,34 @@ main {
 
   .control {
     flex: 1 1 0;
+  }
+
+  .control-label {
+    font-size: 12px;
+    margin-bottom: 5px;
+  }
+
+  .stepper {
+    min-height: 36px;
+    padding: 4px;
+    gap: 5px;
+  }
+
+  .step-btn {
+    width: 32px;
+  }
+
+  .step-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .step-value {
+    font-size: 14px;
+  }
+
+  .sidebar-footer {
+    font-size: 11px;
   }
 
   main {

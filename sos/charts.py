@@ -5,6 +5,7 @@ import altair as alt
 from sos.utils import normalize_team_name, logo_to_dataurl
 from sos.utils import team_to_logo_path
 from sos.utils import team_display_name
+from sos.presets import CHART_FONT
 
 
 def build_nextN_altair_logos_table(
@@ -31,8 +32,11 @@ def build_nextN_altair_logos_table(
     """
 
     # Global chart styling
-    ROW_FONT = "Roboto"
-    TITLE_FONT = "Arial"
+    # Both the site face: these feed .configure_axis/_title/_text/_legend, which
+    # are more specific than the spec's top-level config.font and would other-
+    # wise keep overriding it back to Roboto/Arial.
+    ROW_FONT = CHART_FONT
+    TITLE_FONT = CHART_FONT
     FONT_SIZE = font_size
     TITLE_FONT_SIZE = title_font_size
 
@@ -275,8 +279,11 @@ def make_sos_table_chart(
     """Build a comparison table for NetRtg and Win% based SOS metrics."""
 
     # Typography settings
-    ROW_FONT = "Roboto"
-    TITLE_FONT = "Arial"
+    # Both the site face: these feed .configure_axis/_title/_text/_legend, which
+    # are more specific than the spec's top-level config.font and would other-
+    # wise keep overriding it back to Roboto/Arial.
+    ROW_FONT = CHART_FONT
+    TITLE_FONT = CHART_FONT
     FONT_SIZE = font_size
     TITLE_FONT_SIZE = title_font_size
 
@@ -495,8 +502,11 @@ def make_sos_scatter_and_side_table(
     """
 
     # Visual presets
-    ROW_FONT = "Roboto"
-    TITLE_FONT = "Arial"
+    # Both the site face: these feed .configure_axis/_title/_text/_legend, which
+    # are more specific than the spec's top-level config.font and would other-
+    # wise keep overriding it back to Roboto/Arial.
+    ROW_FONT = CHART_FONT
+    TITLE_FONT = CHART_FONT
     FONT_SIZE = 15
     TITLE_FONT_SIZE = 18
 

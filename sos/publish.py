@@ -21,7 +21,28 @@ from .charts import (
 )
 from .compute import make_nextN_sos_table
 from .utils import team_to_logo_path, logo_to_site_url
-from .presets import NEXTN_KWARGS, SCATTER_KWARGS, SEASON_KWARGS, NEXT_N_VALUES
+from .presets import (
+    NEXTN_KWARGS,
+    SCATTER_KWARGS,
+    SEASON_KWARGS,
+    NEXT_N_VALUES,
+    CHART_FONT,
+)
+
+
+def to_spec(chart) -> dict:
+    """
+    Serialize a chart, applying the site font to every piece of text in it.
+
+    Set here rather than in sos/charts.py so the chart builders stay about
+    chart content: this is the one place every published spec passes through.
+    Vega-Lite's top-level `config.font` is the default for all text marks,
+    titles and labels, so one key covers axes, legends, headers and marks
+    without enumerating them.
+    """
+    spec = chart.to_dict()
+    spec.setdefault("config", {})["font"] = CHART_FONT
+    return spec
 
 
 def write_artifacts(out_dir: Path, artifacts: Dict[str, dict]) -> None:
@@ -61,7 +82,7 @@ def build_round_artifacts(
             logo_path_to_url_fn=logo_to_site_url,
             **NEXTN_KWARGS,
         )
-        artifacts[f"rounds/{round_num}/next-n/{n}.json"] = chart.to_dict()
+        artifacts[f"rounds/{round_num}/next-n/{n}.json"] = to_spec(chart)
 
     main_chart, table_chart = make_sos_scatter_and_side_table(
         sos_net=sos_net,
@@ -75,8 +96,8 @@ def build_round_artifacts(
         **SCATTER_KWARGS,
     )
     artifacts[f"rounds/{round_num}/scatter.json"] = {
-        "main": main_chart.to_dict(),
-        "table": table_chart.to_dict(),
+        "main": to_spec(main_chart),
+        "table": to_spec(table_chart),
     }
 
     season_chart = make_sos_table_chart(
@@ -88,6 +109,6 @@ def build_round_artifacts(
         season_label=season_label,
         **SEASON_KWARGS,
     )
-    artifacts[f"rounds/{round_num}/season-table.json"] = season_chart.to_dict()
+    artifacts[f"rounds/{round_num}/season-table.json"] = to_spec(season_chart)
 
     return artifacts

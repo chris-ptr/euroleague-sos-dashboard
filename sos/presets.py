@@ -5,6 +5,13 @@ each rendered chart to fit its container via CSS/JS, so there's no need to
 precompute separate desktop/mobile variants.
 """
 
+# Chart text, matched to the site's own heading/body face so a chart doesn't
+# read as a foreign object dropped onto the page. Charts render in the browser
+# via vega-embed, so this resolves against the webfont frontend/index.html
+# already loads — keep it in step with --font-heading in frontend/styles.css,
+# and keep the <link> to Geomini in index.html or this silently falls back.
+CHART_FONT = "Geomini, system-ui, sans-serif"
+
 NEXTN_KWARGS = dict(
     left_col_width=320,
     sos_col_width=110,

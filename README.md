@@ -1,6 +1,8 @@
 # EuroLeague Strength of Schedule Dashboard
 
-A Streamlit dashboard for analyzing **Strength of Schedule (SoS)** in the EuroLeague using both **efficiency-based** (Net Rating) and **results-based** (Win%) approaches, with additional **forward-looking difficulty analysis** for upcoming opponents.
+A static web dashboard for analyzing **Strength of Schedule (SoS)** in the EuroLeague using both **efficiency-based** (Net Rating) and **results-based** (Win%) approaches, with additional **forward-looking difficulty analysis** for upcoming opponents.
+
+Charts are precomputed offline and published as JSON, so the site itself is plain static files — no backend, no database, and no API calls from the browser.
 
 ---
 
@@ -20,14 +22,16 @@ The dashboard visualizes season-long SoS, SoS vs Net Rating relationships, and u
 ## Data sources
 
 - **Official EuroLeague schedule**  
-  Parsed from the official EuroLeague Regular Season PDF and exported to:
-
+  Fetched live from the EuroLeague schedule endpoint via `sos.data.load_schedule_from_api`.
+  Earlier versions parsed the Regular Season PDF into a hand-maintained
+  `EL_2025_26_EL_RS_Schedule.csv`; that file is gone. Because the schedule is now read
+  from the API on every run, postponed games and home/away swaps are picked up
+  automatically instead of needing a manual re-export each time the calendar changes.
 
 - **Team statistics**  
-Fetched with the open-source project:
-https://github.com/giasemidis/euroleague_api
+Fetched using the excellent open-source euroleague_api package by Giannis Giasemidis (github.com/giasemidis/euroleague_api), which made pulling this data far easier.
 
-This provides OffRtg, DefRtg, NetRtg, standings, and game results.
+This API supplies the scheduled game statistics required to compute my advanced metrics.
 
 ---
 
@@ -80,12 +84,5 @@ Opponent logos and color-coded cells provide a quick visual summary of future di
 
 ---
 
-## Run locally
-
-```bash
-pip install -r requirements.txt
-streamlit run app.py
-```
-
 ## To do : <br />
-    - Upload the code for fetching the Euroleague team's logos and the code for the euroleague program parsing.
+    - Upload the code for fetching the Euroleague team's logos.

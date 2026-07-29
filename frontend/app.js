@@ -163,23 +163,71 @@ function setView(view) {
 // through was a fetch nobody asked to see.
 
 function initStepper({ decEl, incEl, valueEl, min, max, get, set }) {
+  // The Round value is an <input> so it can be typed into directly; Next-N is
+  // still a plain <span>. One code path drives both.
+  const editable = valueEl.tagName === "INPUT";
+
   const sync = () => {
     const value = get();
-    valueEl.textContent = value;
+    if (editable) valueEl.value = value;
+    else valueEl.textContent = value;
     decEl.disabled = value <= min;
     incEl.disabled = value >= max;
   };
 
-  const step = (delta) => {
-    const next = Math.min(max, Math.max(min, get() + delta));
-    if (next === get()) return;
-    set(next);
+  // Single funnel for arrows and typing alike, so a typed value can never
+  // reach a round that was never published — it is clamped on the way in.
+  const apply = (next) => {
+    const clamped = Math.min(max, Math.max(min, next));
+    if (clamped === get()) {
+      // Still re-sync: an out-of-range or malformed entry has to snap back to
+      // the value actually in effect rather than sit there looking accepted.
+      sync();
+      return;
+    }
+    set(clamped);
     sync();
     renderActiveView();
   };
 
+  const step = (delta) => apply(get() + delta);
+
   decEl.addEventListener("click", () => step(-1));
   incEl.addEventListener("click", () => step(1));
+
+  if (editable) {
+    // 38 rounds means two digits; derived rather than hardcoded so a longer
+    // season doesn't silently truncate what can be typed.
+    valueEl.maxLength = String(max).length;
+
+    // Commit on Enter or on leaving the field — never per keystroke, or typing
+    // "1" on the way to "12" would fetch round 1 and re-render for nothing.
+    const commit = () => {
+      const parsed = parseInt(valueEl.value, 10);
+      apply(Number.isNaN(parsed) ? get() : parsed);
+    };
+
+    valueEl.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        commit();
+        valueEl.blur();
+      } else if (event.key === "Escape") {
+        sync();
+        valueEl.blur();
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        step(1);
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        step(-1);
+      }
+    });
+
+    valueEl.addEventListener("blur", commit);
+    valueEl.addEventListener("focus", () => valueEl.select());
+  }
+
   sync();
 }
 
