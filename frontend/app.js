@@ -3,6 +3,9 @@ const state = {
   round: null,
   latestRound: null,
   nNext: 5,
+  // Publish timestamp from latest.json, appended to every spec request so a
+  // recompute invalidates hard-cached artifacts. See fetchJSON.
+  version: null,
 };
 
 const els = {
@@ -24,12 +27,23 @@ const els = {
   },
 };
 
-// Per-round chart specs never change once a round is published, so let the
-// browser cache them — otherwise stepping back and forth re-downloads the same JSON.
-// Only latest.json is refetched, since it's the pointer that does move.
-// Artifacts are served from the same origin as this page (see vercel.json).
+// Per-round chart specs are cached hard by the browser and the CDN (see
+// vercel.json) so that stepping back and forth doesn't re-download the same
+// JSON. That is only safe while the URL changes whenever the content does —
+// and a full recompute (scripts/recompute_all.py) rewrites every spec in place
+// under the same path. So each request carries the publish timestamp from
+// latest.json, which is the one file always revalidated, as a version token.
+//
+// Without it a browser that cached the pre-recompute spec would keep serving it
+// for a year: the Cache-Control is `immutable`, so it never revalidates and
+// never even learns the file changed. Only latest.json moving is not enough —
+// that just tells the app which round to ask for, not that the round's contents
+// were rewritten.
 async function fetchJSON(path, { revalidate = false } = {}) {
-  const res = await fetch(`data/${path}`, {
+  const url = state.version && !revalidate
+    ? `data/${path}?v=${encodeURIComponent(state.version)}`
+    : `data/${path}`;
+  const res = await fetch(url, {
     cache: revalidate ? "no-store" : "default",
   });
   if (!res.ok) {
@@ -209,6 +223,10 @@ async function init() {
 
   try {
     const latest = await fetchJSON("latest.json", { revalidate: true });
+    // Set before anything else can fetch a spec: initSteppers only syncs the
+    // DOM, and renderActiveView runs on interaction, so no artifact request
+    // can slip through unversioned.
+    state.version = latest.updated_at || null;
     state.latestRound = latest.round;
     state.round = latest.round;
     initSteppers(latest.round);
