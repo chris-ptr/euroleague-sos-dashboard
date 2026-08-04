@@ -62,43 +62,145 @@ function showStatus(container, message) {
 // Instead of shipping separate desktop/mobile variants, we scale the
 // rendered chart down to fit whatever space is actually available, and
 // re-scale on resize — this is what replaces the old "Mobile layout" toggle.
+//
+// Below MIN_SCALE the chart is still legible but the labels are getting small,
+// so shrinking stops there and the leftover width becomes a horizontal swipe
+// instead. A phone showing a ~1000px-wide table at 0.35 is technically "fitted"
+// and completely unreadable; scroll is the better trade.
+const MIN_SCALE = 0.62;
 
-const scaledCharts = [];
+// Keyed by container so re-rendering a view (round/N change) replaces its entry
+// rather than leaving a stale one that keeps writing to the same element.
+const scaledCharts = new Map();
 
-function availableWidth() {
+function horizontalInsets(el) {
+  const cs = getComputedStyle(el);
+  return (
+    parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) +
+    parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth)
+  );
+}
+
+// The space a chart can actually occupy: <main>'s content box, less the padding
+// and borders of everything between it and the chart (the panel card, mainly).
+// Measured off <main> rather than off the container's own parent because the
+// panel is shrink-to-fit — its width is a consequence of the chart's, so asking
+// it how much room there is would just echo back the last size we set.
+function availableWidth(container) {
   const main = document.querySelector("main");
-  return Math.max(240, main.clientWidth - 40);
+  let width = main.clientWidth - horizontalInsets(main);
+  for (let el = container.parentElement; el && el !== main; el = el.parentElement) {
+    width -= horizontalInsets(el);
+  }
+  return Math.max(200, width);
 }
 
 function applyScale(entry) {
-  const scale = Math.min(1, availableWidth() / entry.naturalWidth);
-  entry.wrapper.style.transformOrigin = "top left";
+  const available = availableWidth(entry.container);
+  const scale = Math.min(1, Math.max(MIN_SCALE, available / entry.naturalWidth));
+  const width = Math.ceil(entry.naturalWidth * scale);
+  const height = Math.ceil(entry.naturalHeight * scale);
+
   entry.wrapper.style.transform = `scale(${scale})`;
-  entry.container.style.width = `${entry.naturalWidth * scale}px`;
-  entry.container.style.height = `${entry.naturalHeight * scale}px`;
+  // A transform doesn't change layout, so the untransformed wrapper would still
+  // reserve its full natural box. The sizer carries the scaled dimensions and
+  // is what the panel and the scroll port measure against.
+  entry.sizer.style.width = `${width}px`;
+  entry.sizer.style.height = `${height}px`;
+  // The container is the scroll port: never wider than the room we have, so a
+  // clamped chart can't push the page sideways — it scrolls inside the card.
+  entry.container.style.width = `${Math.min(width, available)}px`;
+  entry.container.classList.toggle("is-scrollable", width > available);
+
+  // A classic, space-taking scrollbar is laid out inside the port, over the
+  // bottom of the chart — and overflow-y: hidden would then clip what it
+  // covers. Hand back exactly the height it claims. Overlay scrollbars (touch,
+  // macOS) measure zero, so this is a no-op on the devices that have them.
+  entry.container.style.paddingBottom = "";
+  if (width > available) {
+    const bar = entry.container.offsetHeight - entry.container.clientHeight;
+    if (bar > 0) entry.container.style.paddingBottom = `${bar}px`;
+  }
+}
+
+// Touch scrollbars are overlays that only appear once you are already
+// scrolling, so a clamped chart would just look cropped. The hint says
+// otherwise, and retires itself the moment it has been acted on.
+function onChartScroll(event) {
+  event.currentTarget.classList.add("scrolled");
 }
 
 async function embedResponsive(container, spec) {
+  scaledCharts.delete(container);
+  container.classList.remove("is-scrollable", "scrolled");
   container.innerHTML = "";
   container.style.width = "";
-  container.style.height = "";
+  // Same handler reference every time, so repeated renders of one container
+  // don't stack listeners.
+  container.addEventListener("scroll", onChartScroll, { passive: true });
+
+  const sizer = document.createElement("div");
+  // Clips nothing — the scaled chart is exactly the size the sizer is given —
+  // but it stops the wrapper's untransformed layout box (still the chart's full
+  // natural width) from counting toward the scroll port's scrollable area,
+  // which would otherwise put a scrollbar and a stretch of dead space under
+  // every chart that had been scaled down at all.
+  sizer.style.overflow = "hidden";
   const wrapper = document.createElement("div");
-  container.appendChild(wrapper);
+  wrapper.style.transformOrigin = "top left";
+  sizer.appendChild(wrapper);
+  container.appendChild(sizer);
 
   const result = await vegaEmbed(wrapper, spec, { actions: false });
   const el = wrapper.querySelector("svg, canvas");
   if (!el) return result;
 
-  const rect = el.getBoundingClientRect();
-  const entry = { container, wrapper, naturalWidth: rect.width, naturalHeight: rect.height };
-  scaledCharts.push(entry);
+  const entry = { container, sizer, wrapper, el, naturalWidth: 0, naturalHeight: 0 };
+  scaledCharts.set(container, entry);
+  measure(entry);
   applyScale(entry);
   return result;
 }
 
-window.addEventListener("resize", () => {
-  scaledCharts.forEach(applyScale);
-});
+// Natural size has to be read with the transform off, or a re-measure would
+// scale down what is already scaled.
+function measure(entry) {
+  entry.wrapper.style.transform = "none";
+  const rect = entry.el.getBoundingClientRect();
+  if (rect.width) {
+    entry.naturalWidth = rect.width;
+    entry.naturalHeight = rect.height;
+  }
+}
+
+// Coalesced so a drag-resize or a phone rotation doesn't re-scale per event.
+let rescaleFrame = null;
+function rescaleAll() {
+  if (rescaleFrame !== null) return;
+  rescaleFrame = requestAnimationFrame(() => {
+    rescaleFrame = null;
+    scaledCharts.forEach(applyScale);
+  });
+}
+
+window.addEventListener("resize", rescaleAll);
+window.addEventListener("orientationchange", rescaleAll);
+// Catches the layout changes `resize` doesn't report — the sidebar collapsing
+// to a top bar at the breakpoint, on-screen keyboards, desktop zoom.
+if (window.ResizeObserver) {
+  new ResizeObserver(rescaleAll).observe(document.querySelector("main"));
+}
+// A chart is measured with whatever font is available at render time; if
+// Geomini swaps in afterwards the text metrics — and so the chart's natural
+// width — change, so take the measurement again once the swap has happened.
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(() => {
+    scaledCharts.forEach((entry) => {
+      measure(entry);
+      applyScale(entry);
+    });
+  });
+}
 
 // --- View rendering -------------------------------------------------------
 

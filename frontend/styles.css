@@ -441,6 +441,7 @@ input.step-value:focus-visible {
 main {
   flex: 1 1 auto;
   min-width: 0;
+  max-width: 100%;
   padding: 32px 32px 60px;
   display: flex;
   flex-direction: column;
@@ -450,6 +451,7 @@ main {
 .view {
   display: none;
   width: 100%;
+  max-width: 100%;
   flex-direction: column;
   align-items: center;
 }
@@ -503,16 +505,71 @@ main {
   --bracket-size: 16px;
 }
 
+/* Shown only while a chart is both clamped and untouched: a cropped-looking
+   edge on a phone needs to say that the rest is a swipe away, and nothing
+   needs to say it twice. */
+.panel:has(> .chart-container.is-scrollable)::after {
+  content: "swipe ›";
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  pointer-events: none;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-tab-accent) 88%, #000);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  transition: opacity 0.25s;
+}
+
+.panel:has(> .chart-container.is-scrollable.scrolled)::after {
+  opacity: 0;
+}
+
 #view-info .panel {
   display: block;
   width: 100%;
   max-width: 760px;
 }
 
+/* Scroll port for the chart inside. app.js scales each chart to fit and only
+   stops at a legibility floor (MIN_SCALE); on a narrow screen the remainder
+   becomes a horizontal swipe, so a wide table is panned rather than clipped.
+   overflow-y is pinned to hidden: with overflow-x scrollable the initial
+   `visible` would otherwise compute to `auto` and a sub-pixel rounding of the
+   scaled height would raise a spurious vertical scrollbar. */
 .chart-container {
   display: inline-block;
   max-width: 100%;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+/* Only a clamped chart gets a visible bar — it is the affordance that says the
+   rest of the chart is over there, so it must not appear on charts that fit. */
+.chart-container.is-scrollable {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-tab-accent) 70%, transparent) transparent;
+}
+
+.chart-container.is-scrollable::-webkit-scrollbar {
+  height: 6px;
+}
+
+.chart-container.is-scrollable::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+  border-radius: 999px;
+}
+
+.chart-container.is-scrollable::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-tab-accent) 70%, transparent);
+  border-radius: 999px;
 }
 
 .chart-row {
@@ -522,6 +579,7 @@ main {
   justify-content: center;
   align-items: flex-start;
   width: 100%;
+  max-width: 100%;
 }
 
 .chart-row .panel {
@@ -600,6 +658,87 @@ main {
   font-family: var(--font-heading);
   font-weight: var(--font-heading-weight);
   font-size: 16px;
+}
+
+/* --- Responsive: narrow rail on tablets and small laptops ---
+   The 390px rail and its 1.5× type are sized for a wide desktop. Between the
+   top-bar breakpoint and ~1240px the rail is still the right layout, but every
+   pixel it keeps is a pixel the chart has to scale away — an iPad in landscape
+   loses a third of the chart to it. So the rail narrows and its type steps back
+   to the original scale, which is what the smaller column was drawn for. */
+
+@media (min-width: 861px) and (max-width: 1240px) {
+  :root {
+    --sidebar-w: 296px;
+  }
+
+  .sidebar {
+    padding: 26px 18px;
+    gap: var(--space-4);
+  }
+
+  .brand-logo {
+    width: 76px;
+    height: 76px;
+  }
+
+  .brand h1 {
+    font-size: 22px;
+  }
+
+  .brand-sub {
+    font-size: 14px;
+  }
+
+  .nav-btn {
+    font-size: 15px;
+    padding: var(--space-2) var(--space-4);
+  }
+
+  .nav-btn.active {
+    --bracket-size: 9px;
+  }
+
+  .nav-btn:not(.nav-info)::after {
+    width: 19px;
+    height: 19px;
+    border-width: 1.5px;
+  }
+
+  .control-label {
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+
+  .stepper {
+    min-height: 40px;
+    padding: 5px;
+  }
+
+  .step-btn {
+    width: 34px;
+  }
+
+  .step-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .step-value {
+    font-size: 16px;
+  }
+
+  .sidebar-footer {
+    font-size: 13px;
+  }
+
+  main {
+    padding: 22px 18px 44px;
+  }
+
+  .panel {
+    padding: 16px;
+  }
 }
 
 /* --- Responsive: sidebar becomes a top bar --- */
@@ -718,5 +857,41 @@ main {
 
   main {
     padding: 18px 14px 40px;
+  }
+
+  /* Card padding is 24px of chart width gone on each side — affordable on a
+     desktop, a sixth of a phone screen here. The brackets pull in with it so
+     they keep hugging the chart rather than landing on top of it. */
+  .panel {
+    padding: 12px;
+  }
+
+  .panel:has(> .chart-container) {
+    --bracket-inset: 5px;
+    --bracket-size: 10px;
+  }
+
+  .chart-row {
+    gap: var(--space-4);
+  }
+
+  #view-info .panel {
+    padding: 16px;
+  }
+}
+
+/* Phones proper: every remaining pixel goes to the chart. */
+@media (max-width: 520px) {
+  main {
+    padding: 14px 8px 32px;
+  }
+
+  .panel {
+    padding: 8px;
+  }
+
+  .panel:has(> .chart-container) {
+    --bracket-inset: 3px;
+    --bracket-size: 8px;
   }
 }
