@@ -10,6 +10,7 @@ from sos.config import (
     TOTAL_SEASON_ROUNDS,
     DEFAULT_N_NEXT,
     CACHE_DIR,
+    season_label as _season_label,
 )
 
 from sos.data import load_games_metadata
@@ -21,6 +22,7 @@ from sos.charts import (
     build_nextN_altair_logos_table,
     make_sos_table_chart,
     make_sos_scatter_and_side_table,
+    make_four_factors_chart,
 )
 
 from sos.utils import team_to_logo_path, logo_to_dataurl
@@ -134,7 +136,7 @@ with st.sidebar:
     n_next = st.slider("Number of next games (N)", 1, 5, DEFAULT_N_NEXT, 1)
 
 
-season_label = f"{int(season)}-{(int(season) + 1) % 100:02d}"
+season_label = _season_label(int(season))
 mobile_mode = st.session_state["mobile_mode"]
 
 # Responsive chart presets
@@ -166,6 +168,18 @@ if not mobile_mode:
         title_font_size=16,
     )
     SEASON_STREAMLIT_WIDTH = None
+
+    FOURFACTORS_KWARGS = dict(
+        team_col_width=250,
+        factor_col_width=74,
+        rating_col_width=110,
+        row_height=26,
+        logo_size=24,
+        name_font_size=13,
+        value_font_size=11,
+        font_size=13,
+        title_font_size=18,
+    )
 else:
     # Mobile
     NEXTN_KWARGS = dict(
@@ -194,6 +208,18 @@ else:
         title_font_size=13,
     )
     SEASON_STREAMLIT_WIDTH = None
+
+    FOURFACTORS_KWARGS = dict(
+        team_col_width=110,
+        factor_col_width=52,
+        rating_col_width=80,
+        row_height=25,
+        logo_size=21,
+        name_font_size=11,
+        value_font_size=9,
+        font_size=11,
+        title_font_size=13,
+    )
 
 
 is_small_screen = mobile_mode
@@ -231,6 +257,7 @@ tab_labels = [
     "Next-N Games SoS",
     "SoS vs Team NetRtg Scatter",
     "NetRtg & Win% Methods Table",
+    "Four Factors",
 ]
 
 selected_tab = st.radio(
@@ -481,7 +508,7 @@ Future updates will include EuroCup support and historical seasonal analysis.
 elif selected_tab == "Next-N Games SoS":
     try:
         with st.spinner(f"Forecasting next {int(n_next)} games SOS..."):
-            team_ratings, sos_net, sos_win = compute_for_round(current_round)
+            team_ratings, sos_net, sos_win, four_factors = compute_for_round(current_round)
             sos_nextN_df = load_nextN_sos(
                 current_round=int(current_round),
                 games_meta=games_meta,
@@ -511,7 +538,7 @@ elif selected_tab == "Next-N Games SoS":
 elif selected_tab == "SoS vs Team NetRtg Scatter":
     
     with st.spinner("Rendering scatter plot..."):
-        team_ratings, sos_net, sos_win = compute_for_round(current_round)
+        team_ratings, sos_net, sos_win, four_factors = compute_for_round(current_round)
         main_chart, side_table_chart = make_sos_scatter_and_side_table(
         sos_net=sos_net,
         team_ratings=team_ratings,
@@ -540,7 +567,7 @@ elif selected_tab == "SoS vs Team NetRtg Scatter":
 # --- Tab 3: Season Metrics Comparison ---
 elif selected_tab == "NetRtg & Win% Methods Table":
     with st.spinner("Generating SOS table..."):
-        team_ratings, sos_net, sos_win = compute_for_round(current_round)
+        team_ratings, sos_net, sos_win, four_factors = compute_for_round(current_round)
         sos_table_chart = make_sos_table_chart(
         sos_net=sos_net,
         sos_win=sos_win,
@@ -552,5 +579,20 @@ elif selected_tab == "NetRtg & Win% Methods Table":
         mobile_mode=mobile_mode,
     )
     st.altair_chart(sos_table_chart, use_container_width=False, theme=None)
+
+# --- Tab 4: Four Factors Team Profile ---
+elif selected_tab == "Four Factors":
+    with st.spinner("Generating Four Factors table..."):
+        team_ratings, sos_net, sos_win, four_factors = compute_for_round(current_round)
+        four_factors_chart = make_four_factors_chart(
+            four_factors=four_factors,
+            team_to_logo_path=team_to_logo_path,
+            logo_path_to_url_fn=logo_to_dataurl,
+            round_ref=int(current_round),
+            season_label=season_label,
+            **FOURFACTORS_KWARGS,
+            mobile_mode=mobile_mode,
+        )
+    st.altair_chart(four_factors_chart, use_container_width=False, theme=None)
 
 

@@ -3,6 +3,10 @@ const state = {
   round: null,
   latestRound: null,
   nNext: 5,
+  // Index into `seasons`, not a season id — the stepper walks the list, so a
+  // gap in the published seasons is just a shorter list, never a dead step.
+  seasonIndex: 0,
+  seasons: [],
   // Publish timestamp from latest.json, appended to every spec request so a
   // recompute invalidates hard-cached artifacts. See fetchJSON.
   version: null,
@@ -17,6 +21,10 @@ const els = {
   nInc: document.getElementById("n-inc"),
   nValue: document.getElementById("n-value"),
   nControl: document.getElementById("n-next-control"),
+  seasonDec: document.getElementById("season-dec"),
+  seasonInc: document.getElementById("season-inc"),
+  seasonValue: document.getElementById("season-value"),
+  seasonControl: document.getElementById("season-control"),
   controls: document.getElementById("controls"),
   lastUpdated: document.getElementById("last-updated"),
   views: {
@@ -24,6 +32,7 @@ const els = {
     nextn: document.getElementById("view-nextn"),
     scatter: document.getElementById("view-scatter"),
     season: document.getElementById("view-season"),
+    fourfactors: document.getElementById("view-fourfactors"),
   },
 };
 
@@ -39,6 +48,18 @@ const els = {
 // never even learns the file changed. Only latest.json moving is not enough —
 // that just tells the app which round to ask for, not that the round's contents
 // were rewritten.
+// The current season's slice of the published tree. Every artifact lives under
+// its season, so adding one is a data operation: publish it, and the manifest
+// brings it into the picker with no change here.
+function currentSeason() {
+  return state.seasons[state.seasonIndex] || null;
+}
+
+function seasonPath(path) {
+  const season = currentSeason();
+  return season ? `seasons/${season.id}/${path}` : path;
+}
+
 async function fetchJSON(path, { revalidate = false } = {}) {
   const url = state.version && !revalidate
     ? `data/${path}?v=${encodeURIComponent(state.version)}`
@@ -208,7 +229,7 @@ async function renderNextN() {
   const container = document.getElementById("chart-nextn");
   showStatus(container, "Loading...");
   try {
-    const spec = await fetchJSON(`rounds/${state.round}/next-n/${state.nNext}.json`);
+    const spec = await fetchJSON(seasonPath(`rounds/${state.round}/next-n/${state.nNext}.json`));
     await embedResponsive(container, spec);
   } catch (err) {
     showStatus(container, `Could not load this view (${err.message}).`);
@@ -221,7 +242,7 @@ async function renderScatter() {
   showStatus(mainEl, "Loading...");
   tableEl.innerHTML = "";
   try {
-    const { main, table } = await fetchJSON(`rounds/${state.round}/scatter.json`);
+    const { main, table } = await fetchJSON(seasonPath(`rounds/${state.round}/scatter.json`));
     await embedResponsive(mainEl, main);
     await embedResponsive(tableEl, table);
   } catch (err) {
@@ -233,14 +254,30 @@ async function renderSeason() {
   const container = document.getElementById("chart-season");
   showStatus(container, "Loading...");
   try {
-    const spec = await fetchJSON(`rounds/${state.round}/season-table.json`);
+    const spec = await fetchJSON(seasonPath(`rounds/${state.round}/season-table.json`));
     await embedResponsive(container, spec);
   } catch (err) {
     showStatus(container, `Could not load this view (${err.message}).`);
   }
 }
 
-const renderers = { nextn: renderNextN, scatter: renderScatter, season: renderSeason };
+async function renderFourFactors() {
+  const container = document.getElementById("chart-fourfactors");
+  showStatus(container, "Loading...");
+  try {
+    const spec = await fetchJSON(seasonPath(`rounds/${state.round}/four-factors.json`));
+    await embedResponsive(container, spec);
+  } catch (err) {
+    showStatus(container, `Could not load this view (${err.message}).`);
+  }
+}
+
+const renderers = {
+  nextn: renderNextN,
+  scatter: renderScatter,
+  season: renderSeason,
+  fourfactors: renderFourFactors,
+};
 
 function renderActiveView() {
   if (state.view === "info" || !state.round) return;
@@ -264,15 +301,19 @@ function setView(view) {
 // a separate precomputed JSON file, so every intermediate value a slider swept
 // through was a fetch nobody asked to see.
 
-function initStepper({ decEl, incEl, valueEl, min, max, get, set }) {
+function initStepper({ decEl, incEl, valueEl, min, max, get, set, format }) {
   // The Round value is an <input> so it can be typed into directly; Next-N is
   // still a plain <span>. One code path drives both.
   const editable = valueEl.tagName === "INPUT";
 
+  // `format` lets a stepper show something other than the number it steps
+  // over — the season stepper walks a list index but displays "2025-26".
+  const label = format || ((v) => v);
+
   const sync = () => {
     const value = get();
-    if (editable) valueEl.value = value;
-    else valueEl.textContent = value;
+    if (editable) valueEl.value = label(value);
+    else valueEl.textContent = label(value);
     decEl.disabled = value <= min;
     incEl.disabled = value >= max;
   };
@@ -331,15 +372,29 @@ function initStepper({ decEl, incEl, valueEl, min, max, get, set }) {
   }
 
   sync();
+
+  // Handed back so the caller can move the ceiling and re-sync: seasons don't
+  // all run to the same number of rounds, so switching season has to retarget
+  // the round stepper rather than leave it bounded by the previous season.
+  return {
+    sync,
+    setMax: (next) => {
+      max = next;
+      if (editable) valueEl.maxLength = String(max).length;
+      apply(Math.min(get(), max));
+    },
+  };
 }
 
-function initSteppers(latestRound) {
-  initStepper({
+let roundStepper = null;
+
+function initSteppers() {
+  roundStepper = initStepper({
     decEl: els.roundDec,
     incEl: els.roundInc,
     valueEl: els.roundValue,
     min: 1,
-    max: latestRound,
+    max: state.latestRound,
     get: () => state.round,
     set: (v) => { state.round = v; },
   });
@@ -353,6 +408,40 @@ function initSteppers(latestRound) {
     get: () => state.nNext,
     set: (v) => { state.nNext = v; },
   });
+
+  initStepper({
+    decEl: els.seasonDec,
+    incEl: els.seasonInc,
+    valueEl: els.seasonValue,
+    min: 0,
+    max: Math.max(0, state.seasons.length - 1),
+    get: () => state.seasonIndex,
+    set: (v) => {
+      state.seasonIndex = v;
+      const season = currentSeason();
+      state.latestRound = season.latest_round;
+      applySeasonLabel();
+      // Retarget the round stepper first: it clamps the current round into the
+      // new season's range and re-renders, so the view never asks for a round
+      // this season never played.
+      roundStepper.setMax(state.latestRound);
+      roundStepper.sync();
+    },
+    format: (index) => (state.seasons[index] ? state.seasons[index].label : "–"),
+  });
+}
+
+// The season name is never a hardcoded string: the picker and the browser tab
+// both read the label the publisher wrote into the manifest.
+function applySeasonLabel() {
+  const season = currentSeason();
+  if (!season) return;
+  document.title = `EuroLeague Strength of Schedule — ${season.label}`;
+  // With a single published season the stepper has nothing to step to. Keep it
+  // visible so the season in view is always stated, just inert — both arrows
+  // also disable themselves through the usual min/max path. Toggled here rather
+  // than in setView, which runs once before the manifest has been read.
+  els.seasonControl.classList.toggle("is-single", state.seasons.length <= 1);
 }
 
 async function init() {
@@ -377,9 +466,20 @@ async function init() {
     // DOM, and renderActiveView runs on interaction, so no artifact request
     // can slip through unversioned.
     state.version = latest.updated_at || null;
-    state.latestRound = latest.round;
-    state.round = latest.round;
-    initSteppers(latest.round);
+
+    // A manifest from before seasons were split out has no `seasons` array;
+    // synthesize one from its flat fields so an older published tree still boots.
+    state.seasons = Array.isArray(latest.seasons) && latest.seasons.length
+      ? latest.seasons
+      : [{ id: latest.season, label: String(latest.season), latest_round: latest.round }];
+
+    const current = state.seasons.findIndex((s) => s.id === latest.season);
+    state.seasonIndex = current >= 0 ? current : state.seasons.length - 1;
+    state.latestRound = currentSeason().latest_round;
+    state.round = state.latestRound;
+
+    applySeasonLabel();
+    initSteppers();
     if (latest.updated_at) {
       els.lastUpdated.textContent = `Updated ${new Date(latest.updated_at).toLocaleDateString()}`;
     }

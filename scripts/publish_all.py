@@ -13,7 +13,6 @@ Usage:
 """
 import re
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -23,24 +22,29 @@ from sos.config import (
     DEFAULT_COMPETITION,
     CACHE_DIR,
     PUBLISH_DIR,
+    season_label,
+    season_publish_dir,
 )
 from sos.data import load_games_metadata
 from sos.cache import load_cached_round
 from sos.presets import NEXT_N_VALUES
-from sos.publish import build_round_artifacts, write_artifacts
+from sos.publish import build_latest_manifest, build_round_artifacts, write_artifacts
 
 ROUND_FILE_RE = re.compile(r"round_(\d+)\.parquet$")
 NEXT_N_FILE_RE = re.compile(r"^(\d+)\.json$")
 
 
-def prune_stale_next_n(round_num: int) -> int:
+def prune_stale_next_n(round_num: int, season: int = DEFAULT_SEASON) -> int:
     """
     Delete published next-N specs for values no longer in NEXT_N_VALUES.
 
     Rebuilding only overwrites the files it generates, so lowering the N cap
     would otherwise leave the old higher-N JSON on disk and reachable by URL.
+
+    Takes the season because the published tree is filed under one — pointed at
+    the wrong directory this reports "nothing stale" forever instead of failing.
     """
-    next_n_dir = PUBLISH_DIR / f"rounds/{round_num}/next-n"
+    next_n_dir = PUBLISH_DIR / season_publish_dir(season) / f"rounds/{round_num}/next-n"
     removed = 0
     for path in next_n_dir.glob("*.json"):
         m = NEXT_N_FILE_RE.match(path.name)
@@ -67,14 +71,18 @@ def main() -> None:
         season=DEFAULT_SEASON,
         competition_code=DEFAULT_COMPETITION,
     )
-    season_label = f"{DEFAULT_SEASON}-{(DEFAULT_SEASON + 1) % 100:02d}"
+    label = season_label(DEFAULT_SEASON)
 
     for round_num in round_numbers:
         cached = load_cached_round(CACHE_DIR, round_num)
         if cached is None:
-            print(f"  round {round_num}: cache file missing/unreadable, skipping")
+            print(
+                f"  round {round_num}: cache file missing, unreadable, or written "
+                f"before a table this build needs — run scripts/recompute_all.py "
+                f"to rebuild it, then re-run this. Skipping."
+            )
             continue
-        team_ratings, sos_net, sos_win = cached
+        team_ratings, sos_net, sos_win, four_factors = cached
 
         print(f"  round {round_num}: building chart JSON...")
         artifacts = build_round_artifacts(
@@ -84,7 +92,8 @@ def main() -> None:
             team_ratings=team_ratings,
             sos_net=sos_net,
             sos_win=sos_win,
-            season_label=season_label,
+            four_factors=four_factors,
+            season_label=label,
         )
         write_artifacts(PUBLISH_DIR, artifacts)
         stale = prune_stale_next_n(round_num)
@@ -94,13 +103,7 @@ def main() -> None:
     latest_round = max(round_numbers)
     write_artifacts(
         PUBLISH_DIR,
-        {
-            "latest.json": {
-                "round": latest_round,
-                "season": DEFAULT_SEASON,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
-        },
+        {"latest.json": build_latest_manifest(PUBLISH_DIR, DEFAULT_SEASON)},
     )
     print(f"Done. Published rounds 1..{latest_round} to {PUBLISH_DIR}.")
 

@@ -30,7 +30,6 @@
         />
         <div class="brand-text">
           <h1>EuroLeague SoS</h1>
-          <p class="brand-sub">2025-26 Season</p>
         </div>
       </div>
 
@@ -39,6 +38,7 @@
         <button class="nav-btn" data-view="nextn">Next-N Games SoS</button>
         <button class="nav-btn" data-view="scatter">SoS vs Team NetRtg</button>
         <button class="nav-btn" data-view="season">NetRtg &amp; Win% Table</button>
+        <button class="nav-btn" data-view="fourfactors">Four Factors</button>
       </nav>
 
       <div class="controls" id="controls">
@@ -71,6 +71,18 @@
             </button>
             <span class="step-value" id="n-value" aria-live="polite">5</span>
             <button type="button" class="step-btn" id="n-inc" aria-label="More games">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg>
+            </button>
+          </div>
+        </div>
+        <div class="control" id="season-control">
+          <span class="control-label" id="season-label">Season</span>
+          <div class="stepper" role="group" aria-labelledby="season-label">
+            <button type="button" class="step-btn" id="season-dec" aria-label="Previous season">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg>
+            </button>
+            <span class="step-value" id="season-value" aria-live="polite">–</span>
+            <button type="button" class="step-btn" id="season-inc" aria-label="Next season">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg>
             </button>
           </div>
@@ -140,11 +152,64 @@
           <div class="formula">\[\text{SoS}_{\text{Net}} = \frac{2 \cdot \text{OppNetRtg} + \text{OONetRtg}}{3}\]</div>
           <p>Efficiency-based SoS is less sensitive to close-game variance and remains more stable early in the season.</p>
 
+          <h2>Four Factors</h2>
+          <p>
+            Dean Oliver's <strong>Four Factors</strong> break scoring efficiency into the four things a team
+            actually controls, in descending order of how much they decide games. They answer a different
+            question from Strength of Schedule — <em>what kind of team is this</em>, rather than <em>how hard
+            has it had it</em> — so the Four Factors tab stands on its own and feeds none of the SoS numbers.
+          </p>
+
+          <h3>Shooting the ball — Effective Field Goal %</h3>
+          <div class="formula">\[\text{eFG\%} = \frac{\text{FGM} + 0.5 \cdot \text{3PM}}{\text{FGA}}\]</div>
+          <p>Field goal percentage that credits a three for the extra point it is worth.</p>
+
+          <h3>Taking care of the ball — Turnover Rate</h3>
+          <div class="formula">\[\text{TOV\%} = \frac{\text{TOV}}{\text{FGA} + 0.44 \cdot \text{FTA} + \text{TOV}}\]</div>
+          <p>Share of possessions ending in a turnover. Lower is better.</p>
+
+          <h3>Offensive rebounding — Offensive Rebound %</h3>
+          <div class="formula">\[\text{OR\%} = \frac{\text{OREB}}{\text{OREB} + \text{Opponent DREB}}\]</div>
+          <p>Share of a team's own misses it recovers.</p>
+
+          <h3>Getting to the foul line — Free Throw Rate</h3>
+          <div class="formula">\[\text{FTR} = \frac{\text{FTM}}{\text{FGA}}\]</div>
+          <p>How much free-throw scoring a team generates per shot it takes.</p>
+
+          <p>
+            The <strong>DEFENSE</strong> half of the table is the same four formulas applied to what opponents
+            did against that team: the eFG% they were allowed to shoot, the turnovers they were forced into,
+            the free throws they were sent for. The defensive rebounding column is the mirror of the opponents'
+            OR% — the share of their misses this team cleaned up.
+          </p>
+          <p>
+            Every ratio is built from summed season totals rather than averaged game by game, so a high-volume
+            game counts for more than a low-volume one — the same weighting the possession-based ratings use.
+          </p>
+
+          <h3>Four Factor Rating</h3>
+          <p>
+            The eight columns collapse into one number per team using Oliver's relative weights —
+            <strong>40%</strong> shooting, <strong>25%</strong> turnovers, <strong>20%</strong> rebounding,
+            <strong>15%</strong> free throws. The factors are in incompatible units (eFG% spans a few points,
+            FTR is a ratio around .25), so each is first standardized across the league at that round, then
+            signed so positive is always good for the team, then weighted:
+          </p>
+          <div class="formula">\[\text{4F} = \underbrace{0.40 z_{\text{eFG}} - 0.25 z_{\text{TOV}} + 0.20 z_{\text{OR}} + 0.15 z_{\text{FTR}}}_{\text{offense}} + \underbrace{\left(-0.40 z_{\text{eFG}}^{opp} + 0.25 z_{\text{TOV}}^{opp} + 0.20 z_{\text{DR}} - 0.15 z_{\text{FTR}}^{opp}\right)}_{\text{defense}}\]</div>
+          <p>
+            Because it is built from z-scores, the rating is relative by construction: it says how far from
+            league average a team sits in units of league spread. That makes it comparable between teams within
+            a round, but not across rounds — a +1.5 after round 10 and a +1.5 after round 38 are not the same
+            achievement. Cell shading works the same way: each column is colored against its own league mean,
+            with green always the good end, so the shade means "better or worse than the field on this factor".
+          </p>
+
           <h2>How to read the tabs</h2>
           <ul>
             <li><strong>Next-N Games SoS</strong> — forecasts upcoming schedule difficulty using the next N scheduled opponents; color-coded cells represent opponent strength (NetRtg).</li>
             <li><strong>SoS vs Team NetRtg</strong> — contextualizes team performance against schedule difficulty; quadrants highlight overachievers, underachievers, and schedule outliers.</li>
             <li><strong>NetRtg &amp; Win% Table</strong> — compares the NetRtg-based and Win%-based SoS estimates side by side for every team.</li>
+            <li><strong>Four Factors</strong> — a standalone team profile, independent of schedule difficulty: what each team does well and badly on each side of the ball. It does not feed any SoS number.</li>
           </ul>
 
           <details class="glossary">
@@ -174,6 +239,16 @@
             <div class="formula">\[\text{OONetRtg} = \frac{1}{\text{TmGP}} \sum_{i=1}^{n} \text{OppNetRtg}_i\]</div>
             <p><strong>SoS (NetRtg)</strong>: composite efficiency-based difficulty</p>
             <div class="formula">\[\text{SoS}_{\text{Net}} = \frac{2 \cdot \text{OppNetRtg} + \text{OONetRtg}}{3}\]</div>
+
+            <h3>Four Factors</h3>
+            <ul>
+              <li><strong>eFG%</strong>: effective field goal percentage — three-pointers credited at 1.5 field goals</li>
+              <li><strong>TOV%</strong>: share of possessions lost to a turnover (lower is better on offense, higher is better on defense)</li>
+              <li><strong>OR%</strong>: share of a team's own missed shots it rebounds</li>
+              <li><strong>DR%</strong>: share of the opponents' missed shots it rebounds</li>
+              <li><strong>FTR</strong>: free throws made per field goal attempted</li>
+              <li><strong>4F Rating</strong>: the eight factors weighted 40/25/20/15 as league-relative z-scores</li>
+            </ul>
           </details>
 
           <details class="glossary">
@@ -182,7 +257,7 @@
               <li>Visualization layer: Vega-Lite (built with Altair, rendered client-side with vega-embed)</li>
               <li>Assets: team logos served as static PNGs, referenced by URL from the chart specs</li>
               <li>Data pipeline: a local script computes new rounds and writes precomputed chart JSON into the site itself; this page fetches it from the same origin — no live backend, no database</li>
-              <li>Current scope: EuroLeague (competition code E), 2025-26 season. Future updates may include EuroCup support and historical seasonal analysis.</li>
+              <li>Current scope: EuroLeague (competition code E); seasons available are listed in the Season selector. Future updates may include EuroCup support and further historical seasons.</li>
             </ul>
           </details>
         </div>
@@ -204,6 +279,12 @@
       <section id="view-season" class="view">
         <div class="panel">
           <div id="chart-season" class="chart-container"></div>
+        </div>
+      </section>
+
+      <section id="view-fourfactors" class="view">
+        <div class="panel">
+          <div id="chart-fourfactors" class="chart-container"></div>
         </div>
       </section>
     </main>

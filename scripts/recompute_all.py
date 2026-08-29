@@ -40,6 +40,9 @@ is deliberately *not* redirected so experiments reuse the same downloaded games:
     CACHE_DIR=/tmp/euroleague-test/cache PUBLISH_DIR=/tmp/euroleague-test/publish \
         python scripts/recompute_all.py
 
+Chart JSON is written under PUBLISH_DIR/seasons/<season>/rounds/<round>/, so a
+second season lands beside the first rather than overwriting it.
+
 Afterwards, commit both trees — Vercel serves PUBLISH_DIR as static files:
 
     git add cache/rounds frontend/data && git commit -m "Recompute rounds" && git push
@@ -48,7 +51,6 @@ import argparse
 import os
 import sys
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Tuple
 
@@ -65,11 +67,12 @@ from sos.config import (
     TOTAL_SEASON_ROUNDS,
     CACHE_DIR,
     PUBLISH_DIR,
+    season_label,
 )
 from sos.cache import compute_for_round
 from sos.data import load_games_metadata
 from sos.rounds import detect_latest_complete_round
-from sos.publish import build_round_artifacts, write_artifacts
+from sos.publish import build_latest_manifest, build_round_artifacts, write_artifacts
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from publish_all import prune_stale_next_n
@@ -412,7 +415,7 @@ def main() -> None:
         print(f"Nothing to do: --from {first} is past the last round {last}.")
         return
 
-    season_label = f"{DEFAULT_SEASON}-{(DEFAULT_SEASON + 1) % 100:02d}"
+    label = season_label(DEFAULT_SEASON)
 
     gamecodes = gamecodes_through_round(games_meta, last)
     cached_on_disk = sum(
@@ -440,7 +443,7 @@ def main() -> None:
 
     for round_num in range(first, last + 1):
         t0 = time.time()
-        team_ratings, sos_net, sos_win = compute_for_round(
+        team_ratings, sos_net, sos_win, four_factors = compute_for_round(
             cache_dir=CACHE_DIR,
             games_meta=games_meta,
             season=DEFAULT_SEASON,
@@ -461,7 +464,8 @@ def main() -> None:
             team_ratings=team_ratings,
             sos_net=sos_net,
             sos_win=sos_win,
-            season_label=season_label,
+            four_factors=four_factors,
+            season_label=label,
         )
         write_artifacts(PUBLISH_DIR, artifacts)
         stale = prune_stale_next_n(round_num)
@@ -474,13 +478,7 @@ def main() -> None:
     if not args.no_publish:
         write_artifacts(
             PUBLISH_DIR,
-            {
-                "latest.json": {
-                    "round": latest_round,
-                    "season": DEFAULT_SEASON,
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }
-            },
+            {"latest.json": build_latest_manifest(PUBLISH_DIR, DEFAULT_SEASON)},
         )
 
     total = time.time() - started

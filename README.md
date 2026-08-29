@@ -67,6 +67,32 @@ The NetRtg-based approach is more stable and less sensitive to close-game varian
 
 ---
 
+## Four Factors
+
+Alongside the schedule work, the dashboard carries a **Four Factors** team profile — Dean
+Oliver's four levers that decide games, computed for each team and for what it allows:
+
+- **eFG%** = (FGM + 0.5 × 3PM) / FGA — shooting, with threes credited for the extra point
+- **TOV%** = TOV / (FGA + 0.44 × FTA + TOV) — share of possessions given away
+- **OR%** = OREB / (OREB + Opponent DREB) — share of own misses recovered
+- **FTR** = FTM / FGA — free-throw scoring generated per shot
+
+The **DEFENSE** half is the same four formulas applied to the opponents' totals; the defensive
+rebounding column is the mirror of the opponents' OR%. Ratios are built from summed season
+totals rather than averaged per game, so high-volume games count for more.
+
+The eight columns collapse into a single **4F Rating** using Oliver's weights (40% shooting,
+25% turnovers, 20% rebounding, 15% free throws). The factors are in incompatible units, so each
+is standardized across the league at that round, signed so positive is always good, then
+weighted. The rating is therefore relative by construction — comparable between teams within a
+round, but not across rounds.
+
+This is a **standalone profile**: it feeds none of the SoS numbers, and the SoS views are
+unchanged by it. Both sides of every game are already in the box scores the ratings read, so it
+needs no extra data source.
+
+---
+
 ## Forward-looking difficulty (Next-N)
 
 Upcoming schedule difficulty is computed using the next **N** scheduled opponents:
@@ -81,6 +107,29 @@ Opponent logos and color-coded cells provide a quick visual summary of future di
 - **Season SoS Table** — NetRtg vs Win% comparison  
 - **SoS(Net) vs NetRtg Scatter** — contextual quadrants and side table  
 - **Next-N Games Table** — upcoming opponent difficulty with logos  
+- **Four Factors Table** — per-team offensive and defensive Four Factors with the weighted 4F Rating  
+
+---
+
+## Seasons
+
+The site is not tied to one season. Every chart is published under
+`frontend/data/seasons/<season>/rounds/<round>/`, and `frontend/data/latest.json`
+carries the manifest the page boots from:
+
+```json
+{"season": 2025, "seasons": [{"id": 2025, "label": "2025-26", "latest_round": 38}], "round": 38}
+```
+
+That manifest is derived by scanning what is actually on disk, so it can never offer
+a season whose JSON is missing. The sidebar's **Season** selector is driven entirely
+by it — with one season published the arrows are inert, and a second one appears in
+the picker with no frontend change. Switching season retargets the round stepper to
+that season's own last round.
+
+Adding a season is therefore a data operation: point `DEFAULT_SEASON` at it and run
+the pipeline. Team logos stay at the shared `frontend/data/logos/`, since clubs
+outlive seasons.
 
 ---
 

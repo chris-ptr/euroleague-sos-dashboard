@@ -17,7 +17,6 @@ Run locally, then commit and push — Vercel serves PUBLISH_DIR as static files:
     git add cache/rounds frontend/data && git commit -m "Publish round N" && git push
 """
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -28,11 +27,12 @@ from sos.config import (
     TOTAL_SEASON_ROUNDS,
     CACHE_DIR,
     PUBLISH_DIR,
+    season_label,
 )
 from sos.data import load_games_metadata
 from sos.rounds import detect_latest_complete_round
 from sos.cache import compute_for_round
-from sos.publish import build_round_artifacts, write_artifacts
+from sos.publish import build_latest_manifest, build_round_artifacts, write_artifacts
 
 
 def main() -> None:
@@ -55,12 +55,12 @@ def main() -> None:
     latest_round = min(detect_latest_complete_round(games_meta), TOTAL_SEASON_ROUNDS)
     print(f"Latest complete round (capped at Regular Season length {TOTAL_SEASON_ROUNDS}): {latest_round}")
 
-    season_label = f"{DEFAULT_SEASON}-{(DEFAULT_SEASON + 1) % 100:02d}"
+    label = season_label(DEFAULT_SEASON)
     new_rounds = []
 
     for round_num in range(1, latest_round + 1):
         is_new = round_num not in existing_rounds
-        team_ratings, sos_net, sos_win = compute_for_round(
+        team_ratings, sos_net, sos_win, four_factors = compute_for_round(
             cache_dir=CACHE_DIR,
             games_meta=games_meta,
             season=DEFAULT_SEASON,
@@ -81,19 +81,14 @@ def main() -> None:
             team_ratings=team_ratings,
             sos_net=sos_net,
             sos_win=sos_win,
-            season_label=season_label,
+            four_factors=four_factors,
+            season_label=label,
         )
         write_artifacts(PUBLISH_DIR, artifacts)
 
     write_artifacts(
         PUBLISH_DIR,
-        {
-            "latest.json": {
-                "round": latest_round,
-                "season": DEFAULT_SEASON,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
-        },
+        {"latest.json": build_latest_manifest(PUBLISH_DIR, DEFAULT_SEASON)},
     )
 
     if new_rounds:

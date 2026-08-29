@@ -8,6 +8,21 @@ from sos.utils import team_display_name
 from sos.presets import CHART_FONT
 
 
+# The site's one diverging scale, written low-to-high for the case where a high
+# value is the good one: red at the bottom, green at the top. Named for what the
+# color *means* rather than for any one chart, because the underlying quantity
+# flips between tables — in the Next-N table green is a weak upcoming opponent,
+# in the Four Factors table it is a strong team — while the reading holds either
+# way: green is the end a team wants to be at. A chart whose *low* end is the
+# good one (schedule difficulty) passes this reversed.
+FAVORABILITY_PALETTE = ("red", "white", "green")
+
+# Border around the grouped columns of the Four Factors table. Dark enough to
+# hold its own against a saturated red or green cell sitting right under it,
+# which a hairline grey does not.
+BLOCK_OUTLINE = "#2f2f2f"
+
+
 def build_nextN_altair_logos_table(
     nextN_df: pd.DataFrame,
     team_ratings: pd.DataFrame,
@@ -146,7 +161,7 @@ def build_nextN_altair_logos_table(
     sos_color = alt.Color(
         "SoS_Net_nextN:Q",
         title="SoS (NetRtg)",
-        scale=alt.Scale(domainMid=0.0, range=["green", "white", "red"]),
+        scale=alt.Scale(domainMid=0.0, range=list(reversed(FAVORABILITY_PALETTE))),
         legend=None,
     )
 
@@ -181,7 +196,7 @@ def build_nextN_altair_logos_table(
     opp_color = alt.Color(
         "Opp_NetRtg:Q",
         title="Opp NetRtg",
-        scale=alt.Scale(domainMid=0.0, range=["green", "white", "red"]),
+        scale=alt.Scale(domainMid=0.0, range=list(reversed(FAVORABILITY_PALETTE))),
         legend=None,
     )
 
@@ -719,3 +734,296 @@ def make_sos_scatter_and_side_table(
 
     return main_chart, table_chart
 
+
+
+def make_four_factors_chart(
+    four_factors: pd.DataFrame,
+    team_to_logo_path,
+    logo_path_to_url_fn,
+    *,
+    round_ref: int | None = None,
+    season_label: str | None = None,
+    title: str | None = None,
+    background: str = "#a3a1a1",
+    team_col_width: int = 250,
+    factor_col_width: int = 74,
+    rating_col_width: int = 110,
+    row_height: int = 26,
+    logo_size: int = 24,
+    name_font_size: int = 13,
+    value_font_size: int = 11,
+    font_size: int = 13,
+    title_font_size: int = 18,
+    mobile_mode: bool = False,
+) -> alt.Chart:
+    """
+    Build the Four Factors team-profile table: eight factor columns plus the
+    weighted composite, one row per team.
+
+    Every factor gets its own color scale rather than one shared scale, because
+    the four live on different numeric ranges — eFG% around .52, FTR around .25
+    — and a shared scale would paint the whole FTR column the same shade. Each
+    column is instead colored across its own league min/max, so the shading
+    answers "good or bad *for this factor*", which is the only comparison that
+    means anything across columns.
+
+    Green is always the good end, which for TOV%-on-offense and the three
+    allowed factors means the scale runs the other way; `higher_is_better`
+    carries that per column so the reversal is data, not four near-identical
+    branches.
+    """
+
+    # Both the site face: these feed .configure_axis/_title/_text/_legend, which
+    # are more specific than the spec's top-level config.font and would other-
+    # wise keep overriding it back to Roboto/Arial.
+    ROW_FONT = CHART_FONT
+    TITLE_FONT = CHART_FONT
+    FONT_SIZE = font_size
+    TITLE_FONT_SIZE = title_font_size
+
+    if title is None:
+        if season_label is not None and round_ref is not None:
+            title = (
+                f"EuroLeague {season_label}: Four Factors Profile "
+                f"(Through Round {round_ref})"
+            )
+        elif round_ref is not None:
+            title = f"EuroLeague Four Factors Profile (Through Round {round_ref})"
+        else:
+            title = "EuroLeague Four Factors Profile"
+
+    df = four_factors.copy()
+    df = df.sort_values("FF_Net", ascending=False).reset_index(drop=True)
+
+    df["logo_url"] = df["TEAM_NAME"].apply(team_to_logo_path).apply(logo_path_to_url_fn)
+    df["TEAM_KEY"] = df["TEAM_NAME"]
+    df["TEAM_LABEL"] = df["TEAM_NAME"].apply(lambda t: team_display_name(t, mobile_mode))
+
+    team_order = df["TEAM_KEY"].tolist()
+    chart_height = row_height * len(df)
+    y_enc = alt.Y("TEAM_KEY:N", sort=team_order, title=None, axis=None)
+
+    # (column, header, side, is_percentage, higher_is_better)
+    factor_columns = [
+        ("eFG", "eFG%", "OFFENSE", True, True),
+        ("TOV_Rate", "TOV%", "OFFENSE", True, False),
+        ("OREB_Pct", "OR%", "OFFENSE", True, True),
+        ("FT_Rate", "FTR", "OFFENSE", False, True),
+        ("Opp_eFG", "eFG%", "DEFENSE", True, False),
+        ("Opp_TOV_Rate", "TOV%", "DEFENSE", True, True),
+        ("DREB_Pct", "DR%", "DEFENSE", True, True),
+        ("Opp_FT_Rate", "FTR", "DEFENSE", False, False),
+    ]
+
+    # Left column: logo + team name, the shared row key for every column.
+    logo_col = (
+        alt.Chart(df)
+        .mark_image(width=logo_size, height=logo_size)
+        .encode(y=y_enc, x=alt.value(14), url="logo_url:N")
+        .properties(width=team_col_width, height=chart_height, title="TEAM")
+    )
+
+    name_col = (
+        alt.Chart(df)
+        .mark_text(align="left", baseline="middle", dx=logo_size + 18, fontSize=name_font_size)
+        .encode(y=y_enc, x=alt.value(0), text="TEAM_LABEL:N")
+    )
+
+    columns = [logo_col + name_col]
+
+    for col, header, side, is_pct, higher_is_better in factor_columns:
+        values = pd.to_numeric(df[col], errors="coerce")
+        lo, hi = float(values.min()), float(values.max())
+        if not np.isfinite(lo) or not np.isfinite(hi) or lo == hi:
+            # One distinct value league-wide (a factor everyone matched, or a
+            # column of NaN) leaves no gradient to build; a flat white column
+            # is honest, a scale over a zero-width domain is not.
+            color = alt.value("#ffffff")
+        else:
+            # White sits on the league mean, not halfway between the extremes,
+            # so a cell's shade answers "better or worse than the field" rather
+            # than "near which end of the range". Nudged off either endpoint
+            # because a domain has to strictly increase: a lopsided column
+            # (nineteen teams tied, one outlier) can put the mean on top of the
+            # min or the max.
+            mean = float(values.mean())
+            span = hi - lo
+            mid = min(max(mean, lo + span * 1e-6), hi - span * 1e-6)
+            # The Next-N table's own red/white/green, so the two tables read as
+            # one site rather than two charts that happen to share a page.
+            palette = list(FAVORABILITY_PALETTE)
+            color = alt.Color(
+                f"{col}:Q",
+                scale=alt.Scale(
+                    domain=[lo, mid, hi],
+                    range=palette if higher_is_better else palette[::-1],
+                    # Vega interpolates colors in HCL by default, which does not
+                    # pass cleanly through white — the mean cell comes out mint
+                    # green instead of neutral. RGB gives the symmetric ramp the
+                    # palette is written to describe.
+                    interpolate="rgb",
+                ),
+                legend=None,
+            )
+
+        # A constant nominal x gives the column one band the full width of the
+        # sub-chart, so the header ends up centered over the cells.
+        df[f"{col}_x"] = ""
+        fmt = ".1%" if is_pct else ".3f"
+
+        cell = (
+            alt.Chart(df)
+            .mark_rect(stroke="#8f8f8f", strokeWidth=0.5)
+            .encode(
+                x=alt.X(f"{col}_x:N", title=None, axis=alt.Axis(labels=False, ticks=False)),
+                y=y_enc,
+                color=color,
+                tooltip=[
+                    alt.Tooltip("TEAM_NAME:N", title="Team"),
+                    alt.Tooltip(f"{col}:Q", title=f"{side.title()} {header}", format=fmt),
+                ],
+            )
+            .properties(
+                width=factor_col_width,
+                height=chart_height,
+                title=header,
+                # Drawn per column because Vega-Lite has no border for a concat
+                # group. With spacing=0 inside the block the adjacent borders
+                # meet, so four boxes read as one outlined table with rules
+                # between the factors — which is the outline we actually want,
+                # and it doubles as the column separator.
+                view=alt.ViewConfig(stroke=BLOCK_OUTLINE, strokeWidth=1.5),
+            )
+        )
+
+        label = (
+            alt.Chart(df)
+            .mark_text(baseline="middle", fontSize=value_font_size, color="black")
+            .encode(
+                x=alt.X(f"{col}_x:N"),
+                y=y_enc,
+                text=alt.Text(f"{col}:Q", format=fmt),
+            )
+        )
+
+        columns.append(cell + label)
+
+    # The composite, shaped exactly like the Next-N table's SoS column: a shaded
+    # cell carrying its own number. It sits immediately after the team name so
+    # the summary is the first thing on the row and the eight factor columns
+    # read as the breakdown behind it.
+    #
+    # A cell rather than a diverging bar because this column's job is lookup —
+    # scanning down it for one team — and a bar puts every near-zero value in
+    # the middle of the column where the eye cannot line them up. Nothing is
+    # lost: the offense/defense split is in the tooltip.
+    df["FF_Net_x"] = ""
+
+    # domainMid rather than an explicit domain: the rating is already centred on
+    # zero by construction (league z-scores sum to nothing), so zero is the true
+    # neutral point and white lands on it at every round. Reversed against the
+    # Next-N scale, where green marks an *easy* schedule — here green marks a
+    # good team, so that green keeps meaning "favorable for this team" on both.
+    rating_color = alt.Color(
+        "FF_Net:Q",
+        scale=alt.Scale(domainMid=0.0, range=list(FAVORABILITY_PALETTE)),
+        legend=None,
+    )
+
+    rating_cell = (
+        alt.Chart(df)
+        .mark_rect(stroke="#8f8f8f", strokeWidth=0.5)
+        .encode(
+            x=alt.X("FF_Net_x:N", title=None, axis=alt.Axis(labels=False, ticks=False)),
+            y=y_enc,
+            color=rating_color,
+            tooltip=[
+                alt.Tooltip("TEAM_NAME:N", title="Team"),
+                alt.Tooltip("FF_Net:Q", title="Four Factor Rating", format="+.2f"),
+                alt.Tooltip("FF_Off:Q", title="Offense", format="+.2f"),
+                alt.Tooltip("FF_Def:Q", title="Defense", format="+.2f"),
+                alt.Tooltip("Games:Q", title="Games"),
+            ],
+        )
+        .properties(
+            width=rating_col_width,
+            height=chart_height,
+            title="4F RATING",
+            view=alt.ViewConfig(stroke=BLOCK_OUTLINE, strokeWidth=1.5),
+        )
+    )
+
+    rating_text = (
+        alt.Chart(df)
+        .mark_text(baseline="middle", fontSize=value_font_size, fontWeight="bold")
+        .encode(
+            x=alt.X("FF_Net_x:N"),
+            y=y_enc,
+            text=alt.Text("FF_Net:Q", format="+.2f"),
+        )
+    )
+
+    rating_col = rating_cell + rating_text
+
+    # OFFENSE / DEFENSE grouping. The four columns of a side are concatenated
+    # into their own block and the banner is that block's title, so it is
+    # centered over exactly the columns it describes. A separate banner row of
+    # fixed-width text charts cannot manage that: the team column's names
+    # overflow their 250px box, Vega grows the group to fit, and every banner
+    # after it drifts right of the columns it is supposed to label.
+    def side_block(charts: list, label: str) -> alt.HConcatChart:
+        return (
+            # Zero spacing: the per-column borders have to meet to form one
+            # outline. It also buys back 60px of chart width, which is 60px less
+            # horizontal swiping on a phone.
+            alt.hconcat(*charts, spacing=0)
+            .resolve_scale(y="shared", x="independent", color="independent")
+            .properties(
+                title=alt.TitleParams(
+                    label,
+                    font=TITLE_FONT,
+                    fontSize=FONT_SIZE + 1,
+                    fontWeight="bold",
+                    anchor="middle",
+                )
+            )
+        )
+
+    chart = (
+        alt.hconcat(
+            columns[0],
+            rating_col,
+            side_block(columns[1:5], "OFFENSE"),
+            side_block(columns[5:9], "DEFENSE"),
+            spacing=18,
+        )
+        # Independent color scales are what make the eight per-factor palettes
+        # work at all: hconcat shares scales by default, so without this every
+        # column would be painted from a single merged domain — one column's
+        # range applied to another column's numbers.
+        .resolve_scale(y="shared", x="independent", color="independent")
+        .properties(
+            title=alt.TitleParams(
+                title, font=TITLE_FONT, fontSize=TITLE_FONT_SIZE, anchor="start"
+            ),
+            background=background,
+            padding={"left": 20, "right": 20, "top": 20, "bottom": 20},
+        )
+        .configure_axis(
+            labelFont=ROW_FONT,
+            titleFont=ROW_FONT,
+            labelFontSize=FONT_SIZE,
+            titleFontSize=FONT_SIZE,
+        )
+        .configure_title(font=TITLE_FONT, fontSize=TITLE_FONT_SIZE)
+        .configure_text(font=ROW_FONT, fontSize=FONT_SIZE)
+        .configure_view(stroke=None)
+        .configure_legend(
+            labelFont=ROW_FONT,
+            titleFont=ROW_FONT,
+            labelFontSize=FONT_SIZE,
+            titleFontSize=FONT_SIZE,
+        )
+    )
+
+    return chart

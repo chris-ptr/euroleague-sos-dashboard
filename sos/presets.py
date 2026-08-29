@@ -36,4 +36,16 @@ SEASON_KWARGS = dict(
     title_font_size=16,
 )
 
+FOURFACTORS_KWARGS = dict(
+    team_col_width=250,
+    factor_col_width=74,
+    rating_col_width=110,
+    row_height=26,
+    logo_size=24,
+    name_font_size=13,
+    value_font_size=11,
+    font_size=13,
+    title_font_size=18,
+)
+
 NEXT_N_VALUES = tuple(range(1, 6))

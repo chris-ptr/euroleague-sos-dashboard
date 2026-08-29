@@ -165,11 +165,6 @@ a {
   margin: 0;
 }
 
-.brand-sub {
-  margin: 3px 0 0;
-  color: color-mix(in srgb, var(--color-text) 55%, transparent);
-  font-size: 19px;
-}
 
 /* --- Nav pills ---
    Built on the design system's .btn geometry, taken fully round. The active
@@ -382,6 +377,17 @@ a {
   opacity: 0.4;
   cursor: not-allowed;
   box-shadow: none;
+}
+
+/* One published season: the value is still worth stating, the arrows are not.
+   Hidden rather than removed so the stepper keeps the same height and the
+   control block doesn't jump when a second season appears. */
+#season-control.is-single .step-btn {
+  visibility: hidden;
+}
+
+#season-control.is-single .step-value {
+  letter-spacing: 0.02em;
 }
 
 .step-btn:focus-visible {
@@ -686,9 +692,6 @@ main {
     font-size: 22px;
   }
 
-  .brand-sub {
-    font-size: 14px;
-  }
 
   .nav-btn {
     font-size: 15px;
@@ -797,9 +800,6 @@ main {
     font-size: 20px;
   }
 
-  .brand-sub {
-    font-size: 13px;
-  }
 
   .nav-btn {
     font-size: 14px;
@@ -819,12 +819,16 @@ main {
 
   .controls {
     flex-direction: row;
+    /* Three controls no longer fit across a phone. Wrapping lets Round and
+       Next-N share the first row and Season take the second, rather than
+       squeezing all three until the "2025-26" label truncates. */
+    flex-wrap: wrap;
     padding-top: var(--space-4);
     gap: 16px;
   }
 
   .control {
-    flex: 1 1 0;
+    flex: 1 1 140px;
   }
 
   .control-label {
